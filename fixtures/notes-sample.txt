@@ -1,0 +1,66 @@
+# Structurally faithful sample of the note-taking style Forklore replaces.
+# Invented restaurants and dishes; every structural quirk is real and is what
+# the acceptance tests assert against. The private originals live in
+# fixtures/notes-real.txt, which is gitignored.
+
+Hotel Brannock June 2026
+Onsite restaurant claims it's unchanged since 1911??? WILD
+having carbonara and a wedge
+Servers are rude
+Wedge salad was delicious, Sam and I split it. Crisp. Cold. Right size for 1/2
+Carbonara changed our lives, handmade 1" egg noodles, perfectly al dented,
+insanely rich, a spoon of ricotta with lemon to cut it. Simply divine
+6/21/26 - breakfast at brannock HORRIBLE
+SERVICE HORRIBLE
+Probably wait to come back
+
+The Lamplight - amazing mac and cheese, great drinks, disturbingly phenomenal
+staff, Dale works Mondays 7-2
+
+Verano
+Wedge extremely crisp flavorful dressing excellent lettuce
+Two rolls served with the harbor dipping sauce rolls were fresh homemade
+Ordered ravioli i mean tortellini in a red sauce
+
+Fifth Avenue Social PHENOMENAL MAC AND CHICKEN
+BURNT ENDS EXCELLENT
+Wedge excellent
+Fries mid
+Have Robin get mac and cheese as her side
+Dale and Marvin agrees and recommends chicken pot pie remember is from Iowa
+6/15/26 Kansas
+Get bbq shrimp with Casey and Drew
+Get boro fries
+We got burnt ends, animal style burg with lettuce and tomato on the side
+
+Halberd
+6/15/26 ordered potatoe barrels
+7/15/25
+We got pizza, baked potato pizza, we got silly bread and it was fine but
+probably wouldn't get it again, robin wants mozz sticks Robin got chicken and
+LOVED IT!!!!!
+8/10/26
+Ordered club and soup of the day was French onion Sam ordered reuben
+WANT:
+Philly,
+Ruben (chopped)
+Pretzle
+Club
+Piggy morgan (Sam)
+Pet entree!!
+Order the barrel potatoes and add a Chilli bomb to it
+we want pepperoni pizza next time and barrel tots and robin wants chicken
+- great for pizza, menu doesn't
+
+Pizza Corvino in kc - NOT dry, very hot, white pizza x2
+Pizzas to try: White tomato,
+Aioe all in one eatery - $27 per person but even if you order 1 thing it is
+still $27 and you have to pay to sit
+Ordered white with broccoli two times, beware. "White corvino" do not order
+
+Cafe Mirabel - what we got 7/31/26
+Arancini (bad) ((Sam says they were "fine")) and bread service
+lamb meatballs and they were PHENOMENAL delish, white sauce FIYA
+Get salt with the table. Skip bread and arancini.
+What we want- burrata, pan con tomate, alubias blancas, papas fritas con ajo,
+albondogas caseras, patatas bravas
