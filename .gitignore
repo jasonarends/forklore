@@ -1,26 +1,25 @@
-*.iml
+# Gradle / build output
 .gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
 /build
+app/build
 /captures
-.externalNativeBuild
-.cxx
+.kotlin/
+
+# Local configuration — machine specific, never commit
 local.properties
 
-# Signing
+# Signing material
 *.jks
 *.keystore
 keystore.properties
 
-# Kotlin
-.kotlin/
-
-# Android Studio
+# IDE
 /.idea/
+*.iml
+
+# Native build
+.externalNativeBuild
+.cxx
+
+# OS
+.DS_Store

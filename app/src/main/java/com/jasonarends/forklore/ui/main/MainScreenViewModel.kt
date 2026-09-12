@@ -2,7 +2,7 @@ package com.jasonarends.forklore.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.jasonarends.forklore.data.DataRepository
+import com.jasonarends.forklore.data.repository.DataRepository
 import com.jasonarends.forklore.ui.main.MainScreenUiState.Success
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

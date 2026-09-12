@@ -2,46 +2,47 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.spotless)
 }
 
 android {
-    namespace = "com.jasonarends.forklore"
-    compileSdk = 37
-    compileSdkMinor = 2
-    defaultConfig {
-        applicationId = "com.jasonarends.forklore"
-        minSdk = 30
-        targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
-    }
+  namespace = "com.jasonarends.forklore"
+  compileSdk = 37
+  compileSdkMinor = 2
+  defaultConfig {
+    applicationId = "com.jasonarends.forklore"
+    minSdk = 30
+    targetSdk = 37
+    versionCode = 1
+    versionName = "1.0"
+  }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
+  buildTypes {
+    release {
+      isMinifyEnabled = false
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    buildFeatures {
-      compose = true
-      aidl = false
-      buildConfig = false
-      shaders = false
-    }
+  }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
+  buildFeatures {
+    compose = true
+    aidl = false
+    buildConfig = false
+    shaders = false
+  }
 
-    packaging {
-      resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
-      }
+  packaging {
+    resources {
+      excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+  }
 }
 
 kotlin {
-    jvmToolchain(17)
+  jvmToolchain(17)
 }
 
 dependencies {
@@ -82,4 +83,15 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+}
+
+spotless {
+  kotlin {
+    target("src/**/*.kt")
+    ktfmt().googleStyle()
+  }
+  kotlinGradle {
+    target("*.kts")
+    ktfmt().googleStyle()
+  }
 }

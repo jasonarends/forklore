@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -18,7 +21,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
 
       - uses: android-actions/setup-android@v4
 
@@ -29,6 +32,12 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew test
+
+      - name: Compile instrumented tests
+        run: ./gradlew assembleDebugAndroidTest
+
+      - name: Format check
+        run: ./gradlew spotlessCheck
 
       - name: Lint
         run: ./gradlew lint

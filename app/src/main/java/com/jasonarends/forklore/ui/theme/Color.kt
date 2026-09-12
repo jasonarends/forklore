@@ -1,4 +1,4 @@
-package com.jasonarends.forklore.theme
+package com.jasonarends.forklore.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

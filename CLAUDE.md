@@ -14,8 +14,15 @@ notes that motivated the data model.
 
 1. **The app works offline, with no account.** Never introduce a code path that requires
    network or sign-in to view, create, or edit local data. Sync and sharing are additive.
-2. **Room is the source of truth for the UI.** ViewModels observe Room via `Flow`. They do
-   not call the network directly. Remote data is written into Room and the UI reacts.
+   The database is included in Android cloud backup (see `res/xml/data_extraction_rules.xml`),
+   which means M3 sync must treat a restored database as a peer to merge, never as
+   authoritative and never as empty.
+2. **Room is the source of truth for saved data.** ViewModels observe Room via `Flow`; saved
+   data reaches the UI no other way. The one carve-out: *transient* provider results — an OSM
+   typeahead list the user is still scrolling — are ViewModel-local state and are **not**
+   written to Room. Room is written when the user picks something. Never persist search
+   results speculatively; it pollutes the database with places nobody chose and puts rule 3's
+   dedupe at war with itself.
 3. **External place data is a cache, never authoritative.** A `Place` row keeps our own
    name/address; provider fields (`providerId`) are for refresh and dedupe only. The app
    must render correctly when every provider field is null.
@@ -45,17 +52,49 @@ com.jasonarends.forklore
 ```
 
 Unidirectional data flow: `Room → Repository → ViewModel (StateFlow<UiState>) → Composable`.
-Events flow back as function references passed into composables. Follow the shape already
-in `ui/main/MainScreenViewModel.kt` — a sealed `UiState` with `Loading`/`Error`/`Success`
-and `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Loading)`.
+Events flow back as function references passed into composables.
+
+Every ViewModel follows this shape (the template's `MainScreenViewModel` is a placeholder
+that M1 deletes — this doc, not that file, is the reference):
+
+```kotlin
+class PlaceListViewModel(placeRepository: PlaceRepository) : ViewModel() {
+  val uiState: StateFlow<PlaceListUiState> =
+    placeRepository.places
+      .map<List<Place>, PlaceListUiState>(PlaceListUiState::Success)
+      .catch { emit(PlaceListUiState.Error(it)) }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlaceListUiState.Loading)
+
+  companion object {
+    val Factory = viewModelFactory {
+      initializer {
+        val app = this[APPLICATION_KEY] as ForkloreApp
+        PlaceListViewModel(app.container.placeRepository)
+      }
+    }
+  }
+}
+
+sealed interface PlaceListUiState {
+  data object Loading : PlaceListUiState
+  data class Error(val throwable: Throwable) : PlaceListUiState
+  data class Success(val places: List<Place>) : PlaceListUiState
+}
+```
 
 ## Dependency injection
 
-**No Hilt.** Dependencies are constructed by hand in a single `AppContainer` held by the
-`Application`. ViewModels take their dependencies as constructor parameters and are created
-through a `ViewModelProvider.Factory`. This is deliberate: the object graph is small, and a
-hand-written container keeps builds fast and the wiring readable. Do not add Hilt, Koin, or
-Dagger without raising it first.
+**No Hilt.** Dependencies are constructed by hand in a single `AppContainer` held by
+`ForkloreApp : Application`. This is deliberate: the object graph is a handful of DAOs and
+repositories, and a hand-written container keeps builds fast and the wiring readable. Do not
+add Hilt, Koin, or Dagger without raising it first.
+
+There is exactly **one** way a composable reaches the container, and it is the `Factory`
+companion shown above, used as `viewModel(factory = PlaceListViewModel.Factory)` in the
+screen-level composable. Do not cast the `Application` inside a composable, do not introduce
+a `CompositionLocal` for the container, and do not thread the container through composable
+parameters. Only screen-level composables touch a ViewModel at all; everything below them
+takes state in and emits events out.
 
 ## Dependencies
 
@@ -78,7 +117,8 @@ Annotation processing uses KSP, never kapt.
 
 ## Style
 
-- Kotlin official style, 2-space indent (matches the existing files).
+- Formatting is not a matter of opinion here: `spotless` with `ktfmt` Google style (2-space)
+  owns it. Run `./gradlew spotlessApply` before committing; CI runs `spotlessCheck`.
 - Name things the way the domain does: `Place`, `PlaceEntry`, `Visit`, `Dish`,
   `DishOpinion`, `DishInterest`, `Person`, `Collection`. Don't invent synonyms —
   no `Restaurant`, `Review`, or `Item`.
@@ -100,11 +140,11 @@ Annotation processing uses KSP, never kapt.
 
 | Term | Meaning |
 |---|---|
-| `Collection` | A list of places, shared with zero or more people. A personal list is a collection with one member. Everything belongs to one. |
+| `PlaceList` | A list of places, shared with zero or more people. A personal list is a `PlaceList` with one member. Everything belongs to one. Named `PlaceList`, not `Collection`, so it doesn't shadow `kotlin.collections.Collection`. |
 | `Place` | A restaurant. Identity is ours; provider IDs are hints for refresh/dedupe. |
-| `PlaceEntry` | A place's membership in a collection, carrying status (want / visited / avoid). |
+| `PlaceEntry` | A place's membership in a `PlaceList`, carrying status (want / visited / avoid). |
 | `Visit` | One occasion at a place. Date is nullable and carries a precision (day / month / year). |
 | `Dish` | A named menu item at a place, with aliases — users spell the same dish three ways. |
-| `DishInterest` | A collection's stance on a dish: want to try, tried, never again. May be scoped to a `Person`. |
+| `DishInterest` | A `PlaceList`'s stance on a dish: want to try, tried, never again. May be scoped to a `Person`. |
 | `DishOpinion` | One author's rating and note for a dish. Multiple per dish by design. |
 | `Person` | Someone whose preferences or recommendations are tracked. May or may not be an app user. |

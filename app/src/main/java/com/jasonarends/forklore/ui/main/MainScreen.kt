@@ -9,8 +9,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
-import com.jasonarends.forklore.data.DefaultDataRepository
-import com.jasonarends.forklore.theme.ForkloreTheme
+import com.jasonarends.forklore.data.repository.DefaultDataRepository
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 
 @Composable
 fun MainScreen(

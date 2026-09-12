@@ -1,4 +1,4 @@
-package com.jasonarends.forklore.data
+package com.jasonarends.forklore.data.repository
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
