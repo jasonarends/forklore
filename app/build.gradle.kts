@@ -3,6 +3,7 @@ plugins {
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.spotless)
+  alias(libs.plugins.ksp)
 }
 
 android {
@@ -24,9 +25,24 @@ android {
     }
   }
   compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
   }
+  // Robolectric runs Room against real SQLite on the JVM, so the acceptance suite runs
+  // in CI without an emulator.
+  // Robolectric runs Room against real SQLite on the JVM, so the acceptance suite runs
+  // in CI with no emulator. The SDK level it emulates is pinned in
+  // src/test/resources/robolectric.properties.
+  testOptions {
+    unitTests {
+      isIncludeAndroidResources = true
+      // Robolectric's FileDescriptor interceptor calls jdk.internal.access.SharedSecrets,
+      // which java.base does not export. Without this the sandbox fails to start on JDK 21
+      // with "Failed to interact with raw FileDescriptor internals".
+      all { it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }
+    }
+  }
+
   buildFeatures {
     compose = true
     aidl = false
@@ -42,8 +58,12 @@ android {
 }
 
 kotlin {
-  jvmToolchain(17)
+  jvmToolchain(21)
 }
+
+// Room's exported schemas are committed (app/schemas) so migrations can be tested
+// against the real previous version rather than a hand-written guess.
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
   val composeBom = platform(libs.androidx.compose.bom)
@@ -69,9 +89,17 @@ dependencies {
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
 
+  // Persistence
+  implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.room.ktx)
+  ksp(libs.androidx.room.compiler)
+  testImplementation(libs.androidx.room.testing)
+
   // Local tests: jUnit, coroutines, Android runner
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation(libs.robolectric)
+  testImplementation(libs.androidx.test.core)
 
   // Instrumented tests: jUnit rules and runners
   androidTestImplementation(libs.androidx.test.core)
