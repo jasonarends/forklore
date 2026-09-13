@@ -1,7 +1,9 @@
 package com.jasonarends.forklore.ui.main
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
@@ -20,6 +22,7 @@ class PlaceListTest {
 
     composeTestRule.onNodeWithText("Halberd").assertExists()
     composeTestRule.onNodeWithText("Fifth Avenue Social · Kansas").assertExists()
+    composeTestRule.onAllNodesWithText("Want to go").assertCountEquals(2)
   }
 
   @Test

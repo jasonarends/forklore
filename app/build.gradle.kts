@@ -99,6 +99,13 @@ dependencies {
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.test.core)
+  // Compose component tests run under Robolectric, so they gate `./gradlew test` with no device.
+  testImplementation(composeBom)
+  testImplementation(libs.androidx.compose.ui.test.junit4)
+  // ui-test-junit4 drags in espresso-core 3.5.0, which reflects on InputManager.getInstance().
+  // That method is gone from the SDK 37 Robolectric image, so without this pin every Compose
+  // test dies at rule setup.
+  testImplementation(libs.androidx.test.espresso.core)
 
   // Instrumented tests: jUnit rules and runners
   androidTestImplementation(libs.androidx.test.core)
