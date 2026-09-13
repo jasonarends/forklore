@@ -9,6 +9,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.jasonarends.forklore.ui.main.MainScreen
+import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
 
 @Composable
 fun MainNavigation() {
@@ -22,6 +23,12 @@ fun MainNavigation() {
         entry<Main> {
           MainScreen(
             onItemClick = { navKey -> backStack.add(navKey) },
+            modifier = Modifier.safeDrawingPadding().padding(16.dp),
+          )
+        }
+        entry<PlaceDetail> { key ->
+          PlaceDetailScreen(
+            placeEntryId = key.placeEntryId,
             modifier = Modifier.safeDrawingPadding().padding(16.dp),
           )
         }

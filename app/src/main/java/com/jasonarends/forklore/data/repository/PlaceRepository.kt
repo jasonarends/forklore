@@ -24,6 +24,9 @@ class PlaceRepository(
   fun observeList(placeListId: String): Flow<List<PlaceEntryWithPlace>> =
     placeEntryDao.observeForList(placeListId)
 
+  /** The detail screen's whole read model: null once the entry is missing or soft-deleted. */
+  fun observeEntry(entryId: String): Flow<PlaceEntryWithPlace?> = placeEntryDao.observeById(entryId)
+
   fun observeByStatus(placeListId: String, status: PlaceStatus): Flow<List<PlaceEntryWithPlace>> =
     placeEntryDao.observeByStatus(placeListId, status)
 
