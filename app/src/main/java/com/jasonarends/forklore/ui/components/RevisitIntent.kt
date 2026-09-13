@@ -1,7 +1,5 @@
 package com.jasonarends.forklore.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -49,9 +47,11 @@ private fun RevisitIntentPickerPreview() {
   ForkloreTheme {
     Surface {
       var intent by remember { mutableStateOf<RevisitIntent?>(RevisitIntent.EAGER) }
-      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        RevisitIntentPicker(intent = intent, onIntentChange = { intent = it })
-      }
+      RevisitIntentPicker(
+        intent = intent,
+        onIntentChange = { intent = it },
+        modifier = Modifier.padding(16.dp),
+      )
     }
   }
 }

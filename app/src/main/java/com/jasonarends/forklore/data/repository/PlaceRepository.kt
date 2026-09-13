@@ -1,5 +1,7 @@
 package com.jasonarends.forklore.data.repository
 
+import androidx.room.withTransaction
+import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceDao
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryDao
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.Flow
  * rather than hard-deleting, and escaping user input before it reaches LIKE.
  */
 class PlaceRepository(
+  /** Held only so [updateEntry] can wrap its read-modify-write in a transaction. */
+  private val database: ForkloreDatabase,
   private val placeDao: PlaceDao,
   private val placeEntryDao: PlaceEntryDao,
   private val clock: Clock = Clock.System,
@@ -24,7 +28,6 @@ class PlaceRepository(
   fun observeList(placeListId: String): Flow<List<PlaceEntryWithPlace>> =
     placeEntryDao.observeForList(placeListId)
 
-  /** The detail screen's whole read model: null once the entry is missing or soft-deleted. */
   fun observeEntry(entryId: String): Flow<PlaceEntryWithPlace?> = placeEntryDao.observeById(entryId)
 
   fun observeByStatus(placeListId: String, status: PlaceStatus): Flow<List<PlaceEntryWithPlace>> =
@@ -65,9 +68,15 @@ class PlaceRepository(
     return entry.id
   }
 
+  /**
+   * Read-modify-write, so it runs inside a transaction: two concurrent calls (a status tap and a
+   * note save, say) reading the same pre-write row would otherwise silently revert each other.
+   */
   suspend fun updateEntry(entryId: String, change: (PlaceEntryEntity) -> PlaceEntryEntity) {
-    val current = placeEntryDao.byId(entryId) ?: return
-    placeEntryDao.update(change(current).copy(updatedAt = clock.nowMillis()))
+    database.withTransaction {
+      val current = placeEntryDao.byId(entryId) ?: return@withTransaction
+      placeEntryDao.update(change(current).copy(updatedAt = clock.nowMillis()))
+    }
   }
 
   /**

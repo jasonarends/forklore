@@ -40,7 +40,7 @@ class PlaceRepositoryTest {
         )
         .allowMainThreadQueries()
         .build()
-    repository = PlaceRepository(db.placeDao(), db.placeEntryDao(), clock)
+    repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), clock)
     listId = "list"
     db
       .placeListDao()

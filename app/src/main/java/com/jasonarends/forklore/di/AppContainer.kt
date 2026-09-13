@@ -8,6 +8,9 @@ import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.data.repository.PlaceListRepository
 import com.jasonarends.forklore.data.repository.PlaceRepository
 import com.jasonarends.forklore.data.repository.VisitRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,9 +30,16 @@ import kotlinx.coroutines.flow.asStateFlow
 class AppContainer(context: Context, private val clock: Clock = Clock.System) {
   private val database: ForkloreDatabase by lazy { ForkloreDatabase.build(context) }
 
+  /**
+   * Outlives any single ViewModel, unlike `viewModelScope`. A ViewModel whose `onCleared` must
+   * finish a write (a debounced note save, say) launches it here instead, since `viewModelScope` is
+   * cancelled immediately after `onCleared` returns and would otherwise drop it.
+   */
+  val appScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+
   val placeListRepository by lazy { PlaceListRepository(database.placeListDao(), clock) }
   val placeRepository by lazy {
-    PlaceRepository(database.placeDao(), database.placeEntryDao(), clock)
+    PlaceRepository(database, database.placeDao(), database.placeEntryDao(), clock)
   }
   val personRepository by lazy { PersonRepository(database.personDao(), clock) }
   val visitRepository by lazy { VisitRepository(database.visitDao(), clock) }

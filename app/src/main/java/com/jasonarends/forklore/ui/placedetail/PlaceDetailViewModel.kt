@@ -13,6 +13,7 @@ import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
 import com.jasonarends.forklore.data.repository.PlaceRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,21 +27,20 @@ import kotlinx.coroutines.launch
 /**
  * One [PlaceEntryEntity], editable with no separate "edit mode" — every field writes through
  * [PlaceRepository] as soon as it changes, except the note (see [updateNote]).
- *
- * Unlike [com.jasonarends.forklore.ui.main.MainScreenViewModel], the id this observes comes from
- * navigation rather than [com.jasonarends.forklore.di.AppContainer] state, so the `Factory` here is
- * a function of that id rather than a fixed `val`.
  */
 class PlaceDetailViewModel(
   private val placeRepository: PlaceRepository,
   private val placeEntryId: String,
+  /** Outlives this ViewModel; see [onCleared]. */
+  private val appScope: CoroutineScope,
 ) : ViewModel() {
 
   /**
-   * The note the user is currently typing, overriding whatever Room reports until the debounced
-   * write below lands. Without this, each keystroke would be visible in the UI for a moment and
-   * then overwritten by the previous (pre-edit) value replayed from the still-unwritten database
-   * row, which reads as the app eating keystrokes.
+   * The note the user is currently typing, overriding whatever Room reports. Without this, each
+   * keystroke would be visible in the UI for a moment and then overwritten by the previous
+   * (pre-edit) value replayed from the still-unwritten database row, which reads as the app eating
+   * keystrokes. This ViewModel is the note's only writer, so once set it is authoritative for the
+   * rest of its lifetime — it never needs to yield back to what Room reports.
    */
   private val pendingNote = MutableStateFlow<String?>(null)
 
@@ -68,9 +68,9 @@ class PlaceDetailViewModel(
   /**
    * Debounced rather than written on every keystroke: a note is typed a character at a time and a
    * Room write (plus the Flow re-query it triggers) per character would mean constant recomposition
-   * for no benefit, since nobody reads a note mid-keystroke. [pendingNote] keeps the field
-   * responsive while the write is pending; the trade-off is up to [NOTE_SAVE_DEBOUNCE_MILLIS] of a
-   * pause being lost if the process dies before the debounce fires, which a short interval bounds.
+   * for no benefit, since nobody reads a note mid-keystroke. [onCleared] flushes whatever is still
+   * pending if the screen is left before the debounce fires, so the only way to lose an edit is the
+   * process dying mid-debounce.
    */
   fun updateNote(note: String) {
     pendingNote.value = note
@@ -78,7 +78,20 @@ class PlaceDetailViewModel(
     noteSaveJob = viewModelScope.launch {
       delay(NOTE_SAVE_DEBOUNCE_MILLIS)
       placeRepository.updateEntry(placeEntryId) { it.copy(note = note) }
-      pendingNote.value = null
+    }
+  }
+
+  /**
+   * `viewModelScope` is cancelled immediately after this returns, which would silently cancel
+   * [noteSaveJob] mid-debounce and drop the last edit. [appScope] outlives the ViewModel, so the
+   * flush still lands. Widened from `protected` to `public` (Kotlin allows relaxing an override's
+   * visibility) so a test can call it directly without a real `ViewModelStore` to clear.
+   */
+  public override fun onCleared() {
+    noteSaveJob?.cancel()
+    val note = pendingNote.value
+    if (note != null) {
+      appScope.launch { placeRepository.updateEntry(placeEntryId) { it.copy(note = note) } }
     }
   }
 
@@ -89,10 +102,15 @@ class PlaceDetailViewModel(
   companion object {
     private const val NOTE_SAVE_DEBOUNCE_MILLIS = 500L
 
+    /**
+     * The id this observes comes from navigation rather than
+     * [com.jasonarends.forklore.di.AppContainer] state, so this factory is a function of that id
+     * rather than a fixed `val`.
+     */
     fun factory(placeEntryId: String): ViewModelProvider.Factory = viewModelFactory {
       initializer {
         val app = this[APPLICATION_KEY] as ForkloreApp
-        PlaceDetailViewModel(app.container.placeRepository, placeEntryId)
+        PlaceDetailViewModel(app.container.placeRepository, placeEntryId, app.container.appScope)
       }
     }
   }

@@ -1,9 +1,11 @@
 package com.jasonarends.forklore.ui.placedetail
 
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -86,10 +88,13 @@ class PlaceDetailScreenTest {
     compose.onNodeWithText("Wait a while").assertExists()
     compose.onNodeWithText("Servers are rude, food was incredible.").assertExists()
     // Food and service each get their own rating picker, so "Life-changing" and "Bad" each
-    // appear twice on screen (once per picker) — only one instance of each is selected, and it
-    // must be the right one, or the two verdicts have silently swapped.
-    compose.onAllNodesWithText("Life-changing")[0].assertIsSelected() // food
-    compose.onAllNodesWithText("Bad")[1].assertIsSelected() // service
+    // appear twice on screen (once per picker); the testTag on each picker is what tells them
+    // apart, since only one instance of each label is selected and it must be the right one, or
+    // the two verdicts have silently swapped.
+    compose
+      .onNode(hasText("Life-changing") and hasAnyAncestor(hasTestTag("food")))
+      .assertIsSelected()
+    compose.onNode(hasText("Bad") and hasAnyAncestor(hasTestTag("service"))).assertIsSelected()
   }
 
   @Test
@@ -126,8 +131,7 @@ class PlaceDetailScreenTest {
       )
     }
 
-    // The food picker's chips come first in the tree.
-    compose.onAllNodesWithText("Life-changing")[0].performClick()
+    compose.onNode(hasText("Life-changing") and hasAnyAncestor(hasTestTag("food"))).performClick()
 
     assertEquals(Rating.LIFE_CHANGING, foodRating)
     assertEquals(null, serviceRating)

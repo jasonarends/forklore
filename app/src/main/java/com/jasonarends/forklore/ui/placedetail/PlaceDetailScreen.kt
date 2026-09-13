@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,7 +56,6 @@ fun PlaceDetailScreen(
   }
 }
 
-/** Stateless by design: state in, events out. Only [PlaceDetailScreen] sees a ViewModel. */
 @Composable
 internal fun PlaceDetail(
   entry: PlaceEntryWithPlace,
@@ -97,12 +97,21 @@ internal fun PlaceDetail(
     PlaceStatusPicker(status = entry.entry.status, onStatusChange = onStatusChange)
 
     // Food and service get their own headers, not a shared "Rating" section: divine pasta and
-    // rude servers are two different verdicts and must never read as one.
+    // rude servers are two different verdicts and must never read as one. testTag lets tests tell
+    // the two pickers apart — their rating labels are otherwise identical text.
     SectionHeader("Food")
-    RatingPicker(rating = entry.entry.foodRating, onRatingChange = onFoodRatingChange)
+    RatingPicker(
+      rating = entry.entry.foodRating,
+      onRatingChange = onFoodRatingChange,
+      modifier = Modifier.testTag("food"),
+    )
 
     SectionHeader("Service")
-    RatingPicker(rating = entry.entry.serviceRating, onRatingChange = onServiceRatingChange)
+    RatingPicker(
+      rating = entry.entry.serviceRating,
+      onRatingChange = onServiceRatingChange,
+      modifier = Modifier.testTag("service"),
+    )
 
     SectionHeader("Would we go back?")
     RevisitIntentPicker(intent = entry.entry.revisitIntent, onIntentChange = onRevisitIntentChange)
