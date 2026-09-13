@@ -142,6 +142,33 @@ class PersonPickerTest {
     assertEquals("Casey", created)
   }
 
+  @Test
+  fun aNewlyCreatedOutsiderStaysVisibleWhenTheCallerSelectsThem() {
+    // Simulates the contract PersonPicker's KDoc requires of callers: onCreatePerson resolves
+    // findOrCreate and adds the resulting id to `selected` itself, so a non-household person
+    // created while the household filter is on doesn't vanish behind "Show everyone".
+    val casey = person("Casey", household = false)
+    var people by mutableStateOf(emptyList<PersonEntity>())
+    var selected by mutableStateOf(setOf<String>())
+
+    compose.setContent {
+      PersonPicker(
+        people = people,
+        selected = selected,
+        onSelectionChange = { selected = it },
+        onCreatePerson = {
+          people = people + casey
+          selected = setOf(casey.id)
+        },
+      )
+    }
+
+    compose.onNodeWithTag("person-picker-new-name").performTextInput("Casey")
+    compose.onNodeWithText("Add").performClick()
+
+    compose.onNodeWithTag("person-picker-chip-${casey.id}").assertExists()
+  }
+
   private fun person(name: String, household: Boolean): PersonEntity =
     PersonEntity(
       name = name,

@@ -359,8 +359,9 @@ class AcceptanceSpecTest {
     val second = repository.findOrCreate("val ")
 
     assertEquals(first, second)
-    val stored = db.personDao().observeAll().first()
-    assertEquals(1, stored.count { it.normalizedName == normalizeDishName("Val") })
+    val stored =
+      db.personDao().observeAll().first().filter { it.normalizedName == normalizeDishName("Val") }
+    assertEquals(1, stored.size)
   }
 
   // ---- Constraints. The expensive-to-change part, so it is asserted too ---------------
@@ -372,6 +373,17 @@ class AcceptanceSpecTest {
       person("Robin", household = false)
       person("robin ", household = false)
     }
+  }
+
+  @Test
+  fun personNormalizedNameStaysReservedAfterASoftDelete() = runTest {
+    // The unique index doesn't forgive a tombstoned row: a findOrCreate/rename that only checked
+    // live people would try to insert a second "Val" here and crash on this same constraint,
+    // which is why PersonRepository resurrects a soft-deleted match instead.
+    val valId = person("Val", household = false)
+    db.personDao().update(db.personDao().byId(valId)!!.copy(deletedAt = later))
+
+    assertConstraintViolation { person("val", household = false) }
   }
 
   @Test

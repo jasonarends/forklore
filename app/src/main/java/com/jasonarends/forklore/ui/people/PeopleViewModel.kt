@@ -11,24 +11,20 @@ import com.jasonarends.forklore.data.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class PeopleViewModel(private val personRepository: PersonRepository) : ViewModel() {
+  private val _renameError = MutableStateFlow<RenameError?>(null)
+
   val uiState: StateFlow<PeopleUiState> =
-    personRepository
-      .observeAll()
-      .map<List<PersonEntity>, PeopleUiState>(PeopleUiState::Success)
+    combine(personRepository.observeAll(), _renameError) { people, renameError ->
+        PeopleUiState.Success(people, renameError) as PeopleUiState
+      }
       .catch { emit(PeopleUiState.Error(it)) }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PeopleUiState.Loading)
-
-  private val _renameError = MutableStateFlow<String?>(null)
-
-  /** Set when [rename] collides with someone else's name; cleared on the next successful rename. */
-  val renameError: StateFlow<String?> = _renameError.asStateFlow()
 
   fun addPerson(name: String, isHouseholdMember: Boolean = false) {
     if (name.isBlank()) return
@@ -39,13 +35,16 @@ class PeopleViewModel(private val personRepository: PersonRepository) : ViewMode
     viewModelScope.launch { personRepository.setHouseholdMember(id, isHouseholdMember) }
   }
 
+  /** The affected row owns showing/clearing its own error: see [RenameError.personId]. */
   fun rename(id: String, name: String) {
     if (name.isBlank()) return
     viewModelScope.launch {
       _renameError.value =
         when (personRepository.rename(id, name)) {
           PersonRepository.RenameResult.Success -> null
-          PersonRepository.RenameResult.NameTaken -> "Someone is already named \"${name.trim()}\"."
+          PersonRepository.RenameResult.NameTaken ->
+            RenameError(id, "Someone is already named \"${name.trim()}\".")
+          PersonRepository.RenameResult.NotFound -> null
         }
     }
   }
@@ -64,10 +63,14 @@ class PeopleViewModel(private val personRepository: PersonRepository) : ViewMode
   }
 }
 
+/** [personId] is who the error belongs to, so only that row shows it. */
+data class RenameError(val personId: String, val message: String)
+
 sealed interface PeopleUiState {
   data object Loading : PeopleUiState
 
   data class Error(val throwable: Throwable) : PeopleUiState
 
-  data class Success(val people: List<PersonEntity>) : PeopleUiState
+  data class Success(val people: List<PersonEntity>, val renameError: RenameError? = null) :
+    PeopleUiState
 }

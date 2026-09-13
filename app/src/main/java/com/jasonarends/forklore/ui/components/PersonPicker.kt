@@ -35,9 +35,12 @@ import com.jasonarends.forklore.ui.theme.ForkloreTheme
  * local composable state, the same way a "show password" toggle would.
  *
  * Creating a new person is the one write this component causes, and even that goes through the
- * caller: [onCreatePerson] is expected to call `PersonRepository.findOrCreate`, never to insert
- * directly. The newly created person will appear in [people] once the caller's `Flow` from Room
- * re-emits; this component does not assume it can select it immediately.
+ * caller: [onCreatePerson] is required to call `PersonRepository.findOrCreate` — which returns the
+ * existing id on a dedupe, not always a fresh one — and then add that id to [selected] itself
+ * (replacing the current selection for single select). Without that second step a freshly created
+ * person who isn't a household member matches neither the household filter nor [selected] and
+ * silently disappears behind "Show everyone"; this component has no way to select it for you, since
+ * it only learns the new person exists once [people] re-emits from the caller's `Flow`.
  */
 @Composable
 fun PersonPicker(
@@ -47,10 +50,8 @@ fun PersonPicker(
   onCreatePerson: (String) -> Unit,
   modifier: Modifier = Modifier,
   multiSelect: Boolean = true,
-  initiallyShowAll: Boolean = false,
-  allowReveal: Boolean = true,
 ) {
-  var showAll by remember { mutableStateOf(initiallyShowAll) }
+  var showAll by remember { mutableStateOf(false) }
   var newName by remember { mutableStateOf("") }
 
   // A person already selected stays visible even when hidden by the household filter: a
@@ -80,12 +81,10 @@ fun PersonPicker(
         )
       }
     }
-    if (allowReveal) {
-      if (!showAll && hiddenCount > 0) {
-        TextButton(onClick = { showAll = true }) { Text("Show everyone ($hiddenCount more)") }
-      } else if (showAll && people.any { !it.isHouseholdMember }) {
-        TextButton(onClick = { showAll = false }) { Text("Household only") }
-      }
+    if (!showAll && hiddenCount > 0) {
+      TextButton(onClick = { showAll = true }) { Text("Show everyone ($hiddenCount more)") }
+    } else if (showAll && people.any { !it.isHouseholdMember }) {
+      TextButton(onClick = { showAll = false }) { Text("Household only") }
     }
     Row(
       verticalAlignment = Alignment.CenterVertically,
