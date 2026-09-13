@@ -54,7 +54,15 @@ internal fun PlaceList(entries: List<PlaceEntryWithPlace>, modifier: Modifier = 
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
           )
-          entry.entry.foodRating?.let { RatingLabel(it) }
+          // Food and service are rated apart; a bare rating word would read as an overall verdict.
+          entry.entry.foodRating?.let {
+            Text(
+              "Food:",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            RatingLabel(it)
+          }
           PlaceStatusChip(entry.entry.status)
         }
       }

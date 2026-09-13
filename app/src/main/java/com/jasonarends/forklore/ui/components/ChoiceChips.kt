@@ -2,6 +2,7 @@ package com.jasonarends.forklore.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.SelectableChipColors
@@ -23,7 +24,10 @@ internal fun <T> ChoiceChips(
   modifier: Modifier = Modifier,
   colors: @Composable (T) -> SelectableChipColors = { FilterChipDefaults.filterChipColors() },
 ) {
-  FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+  FlowRow(
+    modifier = modifier.selectableGroup(),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
     options.forEach { option ->
       FilterChip(
         selected = option == selected,
