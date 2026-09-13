@@ -137,11 +137,18 @@ Annotation processing uses KSP, never kapt.
   exported to `app/schemas/` and committed — never delete them.
 - Compose UI tests cover the primary path of each screen, not every state.
 - `./gradlew test` must pass before any commit. Don't commit red.
+- **A screen is not done until it has run on a device.** Compose tests and a green build
+  prove a screen compiles and renders in isolation; they do not catch a layout that breaks
+  at a real width, a theme that only looks wrong in dark mode, or a flow that dead-ends.
+  Before a wave of UI work merges, install it (`./gradlew installDebug`) and use it. If no
+  device is attached, say so explicitly in the PR rather than implying it was verified.
 
 ## Style
 
 - Formatting is not a matter of opinion here: `spotless` with `ktfmt` Google style (2-space)
   owns it. Run `./gradlew spotlessApply` before committing; CI runs `spotlessCheck`.
+  Note that `spotlessApply` rewraps lines, so run it *before* making scripted (sed/python)
+  edits — a replacement written against unformatted source will silently match nothing.
 - Name things the way the domain does: `Place`, `PlaceEntry`, `Visit`, `Dish`,
   `DishOpinion`, `DishInterest`, `Person`, `Collection`. Don't invent synonyms —
   no `Restaurant`, `Review`, or `Item`.
@@ -152,6 +159,7 @@ Annotation processing uses KSP, never kapt.
 ## Commands
 
 ```sh
+./gradlew spotlessApply          # format — run BEFORE scripted edits, see below
 ./gradlew assembleDebug          # debug APK
 ./gradlew test                   # unit tests
 ./gradlew connectedAndroidTest   # instrumented tests (device required)
