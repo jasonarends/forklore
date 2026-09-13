@@ -3,6 +3,8 @@ package com.jasonarends.forklore.data.db
 import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.data.repository.Clock
+import com.jasonarends.forklore.data.repository.PersonRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -345,7 +347,32 @@ class AcceptanceSpecTest {
     assertTrue(db.placeEntryDao().byId(entryId)!!.note.contains("\n"))
   }
 
+  // ---- 15. A person is deduped by name, however it's spelled --------------------------
+
+  @Test
+  fun person_findOrCreateDedupesOnNormalizedName() = runTest {
+    // "have Robin get mac and cheese" today and "Val recommends..." tomorrow must not turn one
+    // Val into two people because someone typed a trailing space.
+    val repository = PersonRepository(db.personDao(), Clock { now })
+
+    val first = repository.findOrCreate("Val")
+    val second = repository.findOrCreate("val ")
+
+    assertEquals(first, second)
+    val stored = db.personDao().observeAll().first()
+    assertEquals(1, stored.count { it.normalizedName == normalizeDishName("Val") })
+  }
+
   // ---- Constraints. The expensive-to-change part, so it is asserted too ---------------
+
+  @Test
+  fun personCannotBeRecordedTwiceUnderOneNormalizedName() = runTest {
+    // The unique index PersonRepository.findOrCreate relies on to dedupe.
+    assertConstraintViolation {
+      person("Robin", household = false)
+      person("robin ", household = false)
+    }
+  }
 
   @Test
   fun placeCannotBeAddedToTheSameListTwice() = runTest {

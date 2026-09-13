@@ -4,8 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -15,12 +19,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
+import com.jasonarends.forklore.People
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.ui.components.EmptyState
 import com.jasonarends.forklore.ui.components.PlaceStatusChip
 import com.jasonarends.forklore.ui.components.RatingLabel
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
   onItemClick: (NavKey) -> Unit,
@@ -28,11 +34,26 @@ fun MainScreen(
   viewModel: MainScreenViewModel = viewModel(factory = MainScreenViewModel.Factory),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
-  when (val current = state) {
-    MainScreenUiState.Loading -> PlaceList(entries = emptyList(), modifier = modifier)
-    is MainScreenUiState.Success -> PlaceList(entries = current.entries, modifier = modifier)
-    is MainScreenUiState.Error ->
-      Text("Couldn't load your list: ${current.throwable.message}", modifier)
+  Scaffold(
+    modifier = modifier,
+    topBar = {
+      TopAppBar(
+        title = { Text("Forklore") },
+        actions = { TextButton(onClick = { onItemClick(People) }) { Text("People") } },
+      )
+    },
+  ) { innerPadding ->
+    when (val current = state) {
+      MainScreenUiState.Loading ->
+        PlaceList(entries = emptyList(), modifier = Modifier.padding(innerPadding))
+      is MainScreenUiState.Success ->
+        PlaceList(entries = current.entries, modifier = Modifier.padding(innerPadding))
+      is MainScreenUiState.Error ->
+        Text(
+          "Couldn't load your list: ${current.throwable.message}",
+          modifier = Modifier.padding(innerPadding),
+        )
+    }
   }
 }
 

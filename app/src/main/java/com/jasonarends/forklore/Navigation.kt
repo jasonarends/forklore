@@ -9,6 +9,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.jasonarends.forklore.ui.main.MainScreen
+import com.jasonarends.forklore.ui.people.PeopleScreen
 
 @Composable
 fun MainNavigation() {
@@ -25,6 +26,7 @@ fun MainNavigation() {
             modifier = Modifier.safeDrawingPadding().padding(16.dp),
           )
         }
+        entry<People> { PeopleScreen(modifier = Modifier.safeDrawingPadding().padding(16.dp)) }
       },
   )
 }
