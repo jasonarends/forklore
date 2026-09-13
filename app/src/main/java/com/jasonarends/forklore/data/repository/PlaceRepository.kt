@@ -30,13 +30,21 @@ class PlaceRepository(
   /** [query] is raw user input; LIKE metacharacters in it are matched literally. */
   fun search(query: String): Flow<List<PlaceEntity>> = placeDao.search(escapeLike(query))
 
-  suspend fun addPlace(name: String, branchLabel: String? = null, address: String? = null): String {
+  suspend fun addPlace(
+    name: String,
+    branchLabel: String? = null,
+    address: String? = null,
+    note: String = "",
+    warning: String? = null,
+  ): String {
     val now = clock.nowMillis()
     val place =
       PlaceEntity(
         name = name,
         branchLabel = branchLabel,
         address = address,
+        note = note,
+        warning = warning,
         createdAt = now,
         updatedAt = now,
       )
@@ -60,6 +68,23 @@ class PlaceRepository(
       )
     placeEntryDao.insert(entry)
     return entry.id
+  }
+
+  /**
+   * The hand-entry path: a place that doesn't exist anywhere yet, created and added to
+   * [placeListId] in one call. Place lookup/dedupe against an existing row is M2 (provider search);
+   * until then every manual entry is its own [PlaceEntity].
+   */
+  suspend fun addPlaceToList(
+    placeListId: String,
+    name: String,
+    branchLabel: String? = null,
+    address: String? = null,
+    note: String = "",
+    warning: String? = null,
+  ): String {
+    val placeId = addPlace(name, branchLabel, address, note, warning)
+    return addToList(placeListId, placeId)
   }
 
   suspend fun updateEntry(entryId: String, change: (PlaceEntryEntity) -> PlaceEntryEntity) {

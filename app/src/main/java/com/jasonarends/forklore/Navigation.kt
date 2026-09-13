@@ -8,7 +8,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
-import com.jasonarends.forklore.ui.main.MainScreen
+import com.jasonarends.forklore.ui.addplace.AddPlaceScreen
+import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
+import com.jasonarends.forklore.ui.placelist.PlaceListScreen
 
 @Composable
 fun MainNavigation() {
@@ -20,8 +22,22 @@ fun MainNavigation() {
     entryProvider =
       entryProvider {
         entry<Main> {
-          MainScreen(
-            onItemClick = { navKey -> backStack.add(navKey) },
+          PlaceListScreen(
+            onAddPlace = { backStack.add(AddPlace) },
+            onPlaceClick = { entryId -> backStack.add(PlaceDetail(entryId)) },
+            modifier = Modifier.safeDrawingPadding().padding(16.dp),
+          )
+        }
+        entry<AddPlace> {
+          AddPlaceScreen(
+            onSaved = { backStack.removeLastOrNull() },
+            onCancel = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding().padding(16.dp),
+          )
+        }
+        entry<PlaceDetail> { key ->
+          PlaceDetailScreen(
+            placeEntryId = key.placeEntryId,
             modifier = Modifier.safeDrawingPadding().padding(16.dp),
           )
         }
