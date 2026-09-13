@@ -1,11 +1,14 @@
 package com.jasonarends.forklore.ui.main
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -13,6 +16,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
+import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.PlaceStatusChip
+import com.jasonarends.forklore.ui.components.RatingLabel
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 
 @Composable
@@ -35,14 +41,30 @@ fun MainScreen(
 internal fun PlaceList(entries: List<PlaceEntryWithPlace>, modifier: Modifier = Modifier) {
   Column(modifier) {
     if (entries.isEmpty()) {
-      Text("Nothing here yet.", style = MaterialTheme.typography.bodyLarge)
+      EmptyState("Nothing here yet.")
     } else {
       entries.forEach { entry ->
-        Text(
-          text = listOfNotNull(entry.place.name, entry.place.branchLabel).joinToString(" · "),
-          style = MaterialTheme.typography.bodyLarge,
+        Row(
           modifier = Modifier.padding(vertical = 4.dp),
-        )
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = listOfNotNull(entry.place.name, entry.place.branchLabel).joinToString(" · "),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+          )
+          // Food and service are rated apart; a bare rating word would read as an overall verdict.
+          entry.entry.foodRating?.let {
+            Text(
+              "Food:",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            RatingLabel(it)
+          }
+          PlaceStatusChip(entry.entry.status)
+        }
       }
     }
   }
