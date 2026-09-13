@@ -32,6 +32,22 @@ notes that motivated the data model.
 5. **Opinions are per-author rows, not columns.** Two people rating the same dish produce
    two `DishOpinion` rows. Never collapse them into one field — it loses the disagreement,
    which is data the users want.
+6. **`PlaceEntry` is the privacy boundary.** `Place` rows are global — one restaurant, one
+   row — but everything a list *says* about a place (visits, dishes, interests, opinions)
+   hangs off that list's `PlaceEntry`. Never hang list-specific writing off `Place`: the
+   same restaurant can be in a private list and a shared one, and a private note must not
+   surface in the shared one. `Person` is the deliberate exception — a person is global, so
+   any list can cite them as an author or a recommender.
+7. **Delete means soft delete.** Stamp `deletedAt` and leave the row; M3 sync propagates
+   tombstones, and a hard delete leaves the other device with no idea anything happened.
+   Every read filters `deletedAt IS NULL`. The `ON DELETE CASCADE` rules in the schema are a
+   referential-integrity net for a genuine purge, not the app's delete path. A repository
+   that soft-deletes a parent owns soft-deleting whatever children must disappear with it,
+   in one transaction.
+8. **Repositories own three things a DAO call always forgets**: stamping `updatedAt` on
+   every write, soft-deleting instead of deleting, and normalizing names before they hit a
+   unique index. This is why ViewModels depend on repositories and `AppContainer` does not
+   expose DAOs at all.
 
 ## Architecture
 
@@ -41,8 +57,8 @@ hurts, not preemptively.
 ```
 com.jasonarends.forklore
 ├── data
-│   ├── db          Room entities, DAOs, database, migrations, converters
-│   ├── repository  Repository interfaces + implementations
+│   ├── db          Room entities, DAOs, relations, database, migrations, converters
+│   ├── repository  Repositories — the only thing ViewModels depend on
 │   └── place       PlaceProvider abstraction (manual, OSM, optional Google)
 ├── di              Manual DI container (see below)
 ├── ui
@@ -109,6 +125,13 @@ Annotation processing uses KSP, never kapt.
 
 ## Testing
 
+- `AcceptanceSpecTest` is the definition of done for the data layer. Add to it before
+  adding a feature. Two rules, both learned the hard way: assert on data read back **out of
+  the database** — a test that only inspects objects it just constructed, or an enum's
+  declaration order, passes with the schema deleted; and treat constraints as behaviour,
+  because unique indices, foreign keys and cascades are the expensive part to change later.
+- Prove a new test can fail. Break the thing it covers, watch it go red, put it back. A test
+  that has never failed has never been tested.
 - Every repository and every ViewModel gets unit tests. Use fakes, not mocking frameworks.
 - Every Room schema change ships with a migration **and** a migration test. Schemas are
   exported to `app/schemas/` and committed — never delete them.

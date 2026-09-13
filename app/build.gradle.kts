@@ -4,6 +4,7 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.spotless)
   alias(libs.plugins.ksp)
+  alias(libs.plugins.room)
 }
 
 android {
@@ -28,11 +29,8 @@ android {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
   }
-  // Robolectric runs Room against real SQLite on the JVM, so the acceptance suite runs
-  // in CI without an emulator.
-  // Robolectric runs Room against real SQLite on the JVM, so the acceptance suite runs
-  // in CI with no emulator. The SDK level it emulates is pinned in
-  // src/test/resources/robolectric.properties.
+  // Robolectric runs Room against real SQLite on the JVM, so the acceptance suite runs in
+  // CI with no emulator. The emulated SDK is set in src/test/resources/robolectric.properties.
   testOptions {
     unitTests {
       isIncludeAndroidResources = true
@@ -61,9 +59,10 @@ kotlin {
   jvmToolchain(21)
 }
 
-// Room's exported schemas are committed (app/schemas) so migrations can be tested
-// against the real previous version rather than a hand-written guess.
-ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+// Exported schemas are committed (app/schemas) so migrations can be tested against the
+// real previous version rather than a hand-written guess. The Room plugin registers the
+// directory as a proper task input, which the raw KSP argument does not.
+room { schemaDirectory("$projectDir/schemas") }
 
 dependencies {
   val composeBom = platform(libs.androidx.compose.bom)

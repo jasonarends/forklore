@@ -1,0 +1,80 @@
+package com.jasonarends.forklore.data.repository
+
+import com.jasonarends.forklore.data.db.PlaceDao
+import com.jasonarends.forklore.data.db.PlaceEntity
+import com.jasonarends.forklore.data.db.PlaceEntryDao
+import com.jasonarends.forklore.data.db.PlaceEntryEntity
+import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
+import com.jasonarends.forklore.data.db.PlaceStatus
+import com.jasonarends.forklore.data.db.escapeLike
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Places and their membership in lists.
+ *
+ * Repositories, not DAOs, are what ViewModels depend on, and they exist to own the three things a
+ * raw DAO call always gets wrong: stamping [PlaceEntity.updatedAt] on every write, soft-deleting
+ * rather than hard-deleting, and escaping user input before it reaches LIKE.
+ */
+class PlaceRepository(
+  private val placeDao: PlaceDao,
+  private val placeEntryDao: PlaceEntryDao,
+  private val clock: Clock = Clock.System,
+) {
+  fun observeList(placeListId: String): Flow<List<PlaceEntryWithPlace>> =
+    placeEntryDao.observeForList(placeListId)
+
+  fun observeByStatus(placeListId: String, status: PlaceStatus): Flow<List<PlaceEntryWithPlace>> =
+    placeEntryDao.observeByStatus(placeListId, status)
+
+  /** [query] is raw user input; LIKE metacharacters in it are matched literally. */
+  fun search(query: String): Flow<List<PlaceEntity>> = placeDao.search(escapeLike(query))
+
+  suspend fun addPlace(name: String, branchLabel: String? = null, address: String? = null): String {
+    val now = clock.nowMillis()
+    val place =
+      PlaceEntity(
+        name = name,
+        branchLabel = branchLabel,
+        address = address,
+        createdAt = now,
+        updatedAt = now,
+      )
+    placeDao.insert(place)
+    return place.id
+  }
+
+  suspend fun addToList(
+    placeListId: String,
+    placeId: String,
+    status: PlaceStatus = PlaceStatus.WANT,
+  ): String {
+    val now = clock.nowMillis()
+    val entry =
+      PlaceEntryEntity(
+        placeListId = placeListId,
+        placeId = placeId,
+        status = status,
+        createdAt = now,
+        updatedAt = now,
+      )
+    placeEntryDao.insert(entry)
+    return entry.id
+  }
+
+  suspend fun updateEntry(entryId: String, change: (PlaceEntryEntity) -> PlaceEntryEntity) {
+    val current = placeEntryDao.byId(entryId) ?: return
+    placeEntryDao.update(change(current).copy(updatedAt = clock.nowMillis()))
+  }
+
+  /**
+   * Soft delete: the row survives so M3 sync can propagate the tombstone. Children are hidden by
+   * their own reads once the parent entry is gone from list queries; a child that must be
+   * independently revivable gets its own tombstone at that point.
+   */
+  suspend fun removeEntry(entryId: String) {
+    val now = clock.nowMillis()
+    val current = placeEntryDao.byId(entryId) ?: return
+    placeEntryDao.update(current.copy(deletedAt = now, updatedAt = now))
+  }
+}

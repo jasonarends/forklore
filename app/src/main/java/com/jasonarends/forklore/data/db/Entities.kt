@@ -3,6 +3,7 @@ package com.jasonarends.forklore.data.db
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.ForeignKey.Companion.CASCADE
+import androidx.room.ForeignKey.Companion.SET_NULL
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
@@ -11,9 +12,18 @@ import java.util.UUID
 fun newId(): String = UUID.randomUUID().toString()
 
 /**
- * A shareable list of places. A personal list is simply a list with one member, so sharing later
- * needs no migration. Named PlaceList rather than Collection to avoid shadowing
- * kotlin.collections.Collection.
+ * Scoping rule, applied uniformly: a [PlaceEntryEntity] is the boundary of a list's private
+ * writing. Places are global — one restaurant, one row, shared by every list that includes it — but
+ * everything a list *says* about a place (visits, dishes, interests, opinions) hangs off that
+ * list's entry for it. The same restaurant in a personal list and a shared list therefore keeps two
+ * independent sets of notes, and nothing written privately can surface in a shared list. The cost
+ * is that a dish recorded in one list is not visible in the other, which is the right trade:
+ * duplicated typing is recoverable, a leaked private opinion is not.
+ *
+ * Deletion, equally uniform: rows are soft-deleted by stamping [deletedAt], which is what M3 sync
+ * propagates. The ON DELETE CASCADE rules below are a referential-integrity net for a genuine hard
+ * purge, not the app's delete path. Repositories own cascading a soft delete to children, in one
+ * transaction — see CLAUDE.md.
  */
 @Entity(tableName = "place_lists")
 data class PlaceListEntity(
@@ -25,15 +35,19 @@ data class PlaceListEntity(
 )
 
 /**
- * Someone whose preferences or recommendations are tracked. Covers both household members whose
- * usual order matters ("have Robin get mac and cheese") and outside recommenders who will never use
- * the app ("Dale and Marvin recommend the pot pie").
+ * Someone whose preferences or recommendations are tracked: a household member whose usual order
+ * matters, or an outsider who recommended something and will never use the app.
+ *
+ * Deliberately *not* scoped to a list. A person is a person, and scoping them per-list means an
+ * opinion could be authored by someone from a different list. List membership arrives in M3 as its
+ * own table.
  */
-@Entity(tableName = "people", indices = [Index("placeListId")])
+@Entity(tableName = "people", indices = [Index("normalizedName", unique = true)])
 data class PersonEntity(
   @PrimaryKey val id: String = newId(),
-  val placeListId: String,
   val name: String,
+  /** Match key, so "Val" and "val " don't become two people. */
+  val normalizedName: String,
   val isHouseholdMember: Boolean = false,
   val note: String = "",
   val createdAt: Long,
@@ -45,7 +59,7 @@ data class PersonEntity(
  * A restaurant. Identity is ours: [providerId] is a hint for refresh and dedupe, never the source
  * of truth, and every provider field may be null for a hand-entered place.
  */
-@Entity(tableName = "places")
+@Entity(tableName = "places", indices = [Index(value = ["provider", "providerId"])])
 data class PlaceEntity(
   @PrimaryKey val id: String = newId(),
   val name: String,
@@ -65,7 +79,7 @@ data class PlaceEntity(
   val deletedAt: Long? = null,
 )
 
-/** A place's membership in one list, carrying that list's stance on it. */
+/** A place's membership in one list, and the root of everything that list writes about it. */
 @Entity(
   tableName = "place_entries",
   foreignKeys =
@@ -101,7 +115,7 @@ data class PlaceEntryEntity(
   foreignKeys =
     [
       ForeignKey(PlaceEntryEntity::class, ["id"], ["placeEntryId"], onDelete = CASCADE),
-      ForeignKey(PersonEntity::class, ["id"], ["authorId"], onDelete = ForeignKey.SET_NULL),
+      ForeignKey(PersonEntity::class, ["id"], ["authorId"], onDelete = SET_NULL),
     ],
   indices = [Index("placeEntryId"), Index("authorId")],
 )
@@ -119,29 +133,42 @@ data class VisitEntity(
   val deletedAt: Long? = null,
 )
 
-/** Who was there. */
+/** Who was there. Carries its own id and tombstone so "Sam wasn't there" can sync. */
 @Entity(
   tableName = "visit_attendees",
-  primaryKeys = ["visitId", "personId"],
   foreignKeys =
     [
       ForeignKey(VisitEntity::class, ["id"], ["visitId"], onDelete = CASCADE),
       ForeignKey(PersonEntity::class, ["id"], ["personId"], onDelete = CASCADE),
     ],
-  indices = [Index("visitId"), Index("personId")],
+  indices =
+    [Index("visitId"), Index("personId"), Index(value = ["visitId", "personId"], unique = true)],
 )
-data class VisitAttendeeEntity(val visitId: String, val personId: String)
+data class VisitAttendeeEntity(
+  @PrimaryKey val id: String = newId(),
+  val visitId: String,
+  val personId: String,
+  val createdAt: Long,
+  val updatedAt: Long,
+  val deletedAt: Long? = null,
+)
 
-/** A named menu item at a place. */
+/**
+ * A named menu item, scoped to one list's entry for a place. [normalizedName] is the match key and
+ * is uniquely indexed per entry, so the same dish cannot be recorded twice however it is spelled.
+ */
 @Entity(
   tableName = "dishes",
-  foreignKeys = [ForeignKey(PlaceEntity::class, ["id"], ["placeId"], onDelete = CASCADE)],
-  indices = [Index("placeId")],
+  foreignKeys = [ForeignKey(PlaceEntryEntity::class, ["id"], ["placeEntryId"], onDelete = CASCADE)],
+  indices =
+    [Index("placeEntryId"), Index(value = ["placeEntryId", "normalizedName"], unique = true)],
 )
 data class DishEntity(
   @PrimaryKey val id: String = newId(),
-  val placeId: String,
+  val placeEntryId: String,
   val canonicalName: String,
+  /** Always [normalizeDishName] of [canonicalName]; repositories must keep these in step. */
+  val normalizedName: String,
   val note: String = "",
   val createdAt: Long,
   val updatedAt: Long,
@@ -161,26 +188,30 @@ data class DishAliasEntity(
   @PrimaryKey val id: String = newId(),
   val dishId: String,
   val alias: String,
-  /** Lowercased and punctuation-stripped, for matching. */
+  /** [normalizeDishName] of [alias]. */
   val normalized: String,
+  val createdAt: Long,
+  val updatedAt: Long,
+  val deletedAt: Long? = null,
 )
 
-/** A list's stance on a dish, optionally scoped to one person. */
+/**
+ * A stance on a dish. The owning list is reached through the dish's place entry rather than stored
+ * again here — one source of truth for scoping.
+ */
 @Entity(
   tableName = "dish_interests",
   foreignKeys =
     [
       ForeignKey(DishEntity::class, ["id"], ["dishId"], onDelete = CASCADE),
-      ForeignKey(PlaceListEntity::class, ["id"], ["placeListId"], onDelete = CASCADE),
-      ForeignKey(PersonEntity::class, ["id"], ["forPersonId"], onDelete = ForeignKey.SET_NULL),
-      ForeignKey(PersonEntity::class, ["id"], ["recommendedById"], onDelete = ForeignKey.SET_NULL),
+      ForeignKey(PersonEntity::class, ["id"], ["forPersonId"], onDelete = SET_NULL),
+      ForeignKey(PersonEntity::class, ["id"], ["recommendedById"], onDelete = SET_NULL),
     ],
-  indices = [Index("dishId"), Index("placeListId"), Index("forPersonId"), Index("recommendedById")],
+  indices = [Index("dishId"), Index("forPersonId"), Index("recommendedById")],
 )
 data class DishInterestEntity(
   @PrimaryKey val id: String = newId(),
   val dishId: String,
-  val placeListId: String,
   val status: DishStatus = DishStatus.WANT,
   /** "Robin wants chicken" — a want belonging to one person, not the whole list. */
   val forPersonId: String? = null,
@@ -204,9 +235,10 @@ data class DishInterestEntity(
     [
       ForeignKey(DishEntity::class, ["id"], ["dishId"], onDelete = CASCADE),
       ForeignKey(PersonEntity::class, ["id"], ["authorId"], onDelete = CASCADE),
-      ForeignKey(VisitEntity::class, ["id"], ["visitId"], onDelete = ForeignKey.SET_NULL),
+      ForeignKey(VisitEntity::class, ["id"], ["visitId"], onDelete = SET_NULL),
     ],
-  indices = [Index("dishId"), Index("authorId"), Index("visitId")],
+  indices =
+    [Index("dishId"), Index("authorId"), Index("visitId"), Index(value = ["dishId", "authorId"])],
 )
 data class DishOpinionEntity(
   @PrimaryKey val id: String = newId(),

@@ -1,12 +1,16 @@
 package com.jasonarends.forklore.data.db
 
+import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -16,18 +20,25 @@ import org.robolectric.RobolectricTestRunner
 /**
  * The acceptance spec for M1, derived from the real notes this app replaces.
  *
- * Each test corresponds to one numbered capability those notes demand. This is the definition of
- * done for the data layer: if a note in fixtures/notes-sample.txt cannot be represented by these
- * tables, a test here fails. Add to this file before adding a feature, not after.
+ * Each test corresponds to one capability those notes demand. This is the definition of done for
+ * the data layer: if a line in fixtures/notes-sample.txt cannot be represented by these tables, a
+ * test here fails. Add to this file before adding a feature, not after.
+ *
+ * Two rules for anything added here, both learned from review:
+ * - Assert on data read back out of the database. A test that only inspects the objects it just
+ *   built, or the declaration order of an enum, passes with the schema deleted.
+ * - Constraints count as behaviour. Foreign keys, unique indices and cascades are the part that is
+ *   expensive to change later, so they get tests of their own.
  */
 @RunWith(RobolectricTestRunner::class)
 class AcceptanceSpecTest {
   private lateinit var db: ForkloreDatabase
   private lateinit var listId: String
-  private lateinit var holly: String
-  private lateinit var jason: String
+  private lateinit var ana: String
+  private lateinit var sam: String
 
   private val now = 1_757_000_000_000L
+  private val later = now + 60_000L
 
   @Before
   fun setUp() = runTest {
@@ -42,8 +53,8 @@ class AcceptanceSpecTest {
     db
       .placeListDao()
       .insert(PlaceListEntity(id = listId, name = "Ours", createdAt = now, updatedAt = now))
-    holly = person("Holly", household = true)
-    jason = person("Jason", household = true)
+    ana = person("Ana", household = true)
+    sam = person("Sam", household = true)
   }
 
   @After fun tearDown() = db.close()
@@ -60,13 +71,14 @@ class AcceptanceSpecTest {
     // "Verano" — no date at all
     visit(entry, epochDay = null, precision = DatePrecision.UNKNOWN)
 
-    val visits = db.visitDao().observeForPlaceEntry(entry).first()
+    val visits = db.visitDao().observeForPlaceEntry(entry).first().map { it.visit }
 
     assertEquals(3, visits.size)
     assertEquals(
       setOf(DatePrecision.DAY, DatePrecision.MONTH, DatePrecision.UNKNOWN),
       visits.map { it.datePrecision }.toSet(),
     )
+    assertEquals(Meal.BREAKFAST, visits.first { it.datePrecision == DatePrecision.DAY }.meal)
     // An undated visit sorts last rather than leading the timeline.
     assertNull(visits.last().dateEpochDay)
   }
@@ -80,28 +92,65 @@ class AcceptanceSpecTest {
     visit(entry, epochDay = 20_284, precision = DatePrecision.DAY) // 7/15/25, entered second
     visit(entry, epochDay = 20_675, precision = DatePrecision.DAY) // 8/10/26
 
-    val visits = db.visitDao().observeForPlaceEntry(entry).first()
+    val visits = db.visitDao().observeForPlaceEntry(entry).first().map { it.visit }
 
-    assertEquals(3, visits.size)
     assertEquals(listOf(20_675L, 20_619L, 20_284L), visits.map { it.dateEpochDay })
+  }
+
+  @Test
+  fun visit_carriesItsAttendees() = runTest {
+    val entry = placeEntry(place("Halberd"))
+    val visitId = visit(entry, epochDay = 20_619, precision = DatePrecision.DAY)
+    // "Get bbq shrimp with Casey and Drew"
+    val casey = person("Casey", household = false)
+    attend(visitId, ana)
+    attend(visitId, casey)
+
+    val attendees = db.visitDao().observeForPlaceEntry(entry).first().single().attendees
+
+    assertEquals(setOf("Ana", "Casey"), attendees.map { it.name }.toSet())
   }
 
   // ---- 3. One dish spelled three ways is still one dish -------------------------------
 
   @Test
   fun dish_resolvesFromAnyRecordedSpelling() = runTest {
-    val placeId = place("Halberd")
-    val dishId =
-      dish(placeId, "barrel potatoes", aliases = listOf("potatoe barrels", "barrel tots"))
+    val entry = placeEntry(place("Halberd"))
+    val dishId = dish(entry, "Barrel Potatoes", aliases = listOf("potatoe barrels", "barrel tots"))
 
-    val byCanonical = db.dishDao().findByAnyName(placeId, "barrel potatoes")
-    val byTypo = db.dishDao().findByAnyName(placeId, "potatoe barrels")
-    val byNickname = db.dishDao().findByAnyName(placeId, "barrel tots")
+    assertEquals(
+      dishId,
+      db.dishDao().findByAnyName(entry, normalizeDishName("barrel potatoes"))?.id,
+    )
+    assertEquals(
+      dishId,
+      db.dishDao().findByAnyName(entry, normalizeDishName("Potatoe Barrels"))?.id,
+    )
+    assertEquals(dishId, db.dishDao().findByAnyName(entry, normalizeDishName("BARREL TOTS"))?.id)
+    assertEquals(1, db.dishDao().observeForPlaceEntry(entry).first().size)
+  }
 
-    assertEquals(dishId, byCanonical?.id)
-    assertEquals(dishId, byTypo?.id)
-    assertEquals(dishId, byNickname?.id)
-    assertEquals(1, db.dishDao().observeForPlace(placeId).first().size)
+  @Test
+  fun dish_resolvesAcrossPunctuationAndAccents() = runTest {
+    val entry = placeEntry(place("The Lamplight"))
+    // Punctuation and accents are exactly where a LOWER()-based match silently fails and
+    // a second row for the same dish appears.
+    val mac = dish(entry, "Mac 'n' Cheese")
+    val creme = dish(entry, "Crème Brûlée")
+
+    assertEquals(mac, db.dishDao().findByAnyName(entry, normalizeDishName("mac n cheese"))?.id)
+    assertEquals(mac, db.dishDao().findByAnyName(entry, normalizeDishName("MAC  N   CHEESE"))?.id)
+    assertEquals(creme, db.dishDao().findByAnyName(entry, normalizeDishName("creme brulee"))?.id)
+  }
+
+  @Test
+  fun dish_cannotBeRecordedTwiceUnderOneEntry() = runTest {
+    val entry = placeEntry(place("Halberd"))
+    dish(entry, "Burnt Ends")
+
+    // The unique (placeEntryId, normalizedName) index is what makes the alias table
+    // meaningful; without it duplicate dishes reappear by another route.
+    assertConstraintViolation { dish(entry, "burnt   ends") }
   }
 
   // ---- 4. Two people can disagree about the same dish ---------------------------------
@@ -109,47 +158,52 @@ class AcceptanceSpecTest {
   @Test
   fun dish_keepsBothAuthorsOpinions_whenTheyDisagree() = runTest {
     // 'Arancini (bad) ((Sam says they were "fine"))'
-    val dishId = dish(place("Cafe Mirabel"), "arancini")
-    opinion(dishId, holly, Rating.BAD, "bad")
-    opinion(dishId, jason, Rating.FINE, "they were fine")
+    val dishId = dish(placeEntry(place("Cafe Mirabel")), "arancini")
+    opinion(dishId, ana, Rating.BAD, "bad")
+    opinion(dishId, sam, Rating.FINE, "they were fine")
 
     val opinions = db.dishOpinionDao().observeForDish(dishId).first()
 
     assertEquals(2, opinions.size)
-    assertEquals(setOf(Rating.BAD, Rating.FINE), opinions.mapNotNull { it.rating }.toSet())
-    assertEquals(setOf(holly, jason), opinions.map { it.authorId }.toSet())
+    assertEquals(Rating.BAD, opinions.single { it.authorId == ana }.rating)
+    assertEquals(Rating.FINE, opinions.single { it.authorId == sam }.rating)
   }
 
   // ---- 5. "Never again" is not the same as "not tried yet" ----------------------------
 
   @Test
   fun dishInterest_distinguishesNeverAgain_fromWant_andTried() = runTest {
-    val placeId = place("Cafe Mirabel")
-    interest(dish(placeId, "arancini"), DishStatus.NEVER_AGAIN) // "Skip bread and arancini"
-    interest(dish(placeId, "burrata"), DishStatus.WANT) // "What we want- burrata"
-    interest(dish(placeId, "lamb meatballs"), DishStatus.TRIED)
+    val entry = placeEntry(place("Cafe Mirabel"))
+    interest(dish(entry, "arancini"), DishStatus.NEVER_AGAIN) // "Skip bread and arancini"
+    interest(dish(entry, "burrata"), DishStatus.WANT) // "What we want- burrata"
+    interest(dish(entry, "lamb meatballs"), DishStatus.TRIED)
 
     val neverAgain = db.dishInterestDao().observeByStatus(listId, DishStatus.NEVER_AGAIN).first()
     val want = db.dishInterestDao().observeByStatus(listId, DishStatus.WANT).first()
 
     assertEquals(1, neverAgain.size)
     assertEquals(1, want.size)
-    assertEquals(3, db.dishInterestDao().observeForPlace(listId, placeId).first().size)
+    assertEquals(3, db.dishInterestDao().observeForPlaceEntry(entry).first().size)
   }
 
   // ---- 6. Ratings use the vocabulary people actually wrote ----------------------------
 
   @Test
-  fun rating_spansMid_toLifeChanging() = runTest {
-    val placeId = place("Fifth Avenue Social")
-    opinion(dish(placeId, "fries"), holly, Rating.MID, "Fries mid")
-    opinion(dish(placeId, "mac and chicken"), holly, Rating.PHENOMENAL, "PHENOMENAL")
-    opinion(dish(placeId, "carbonara"), holly, Rating.LIFE_CHANGING, "changed our lives")
+  fun rating_roundTripsThroughTheDatabase_acrossItsWholeRange() = runTest {
+    val entry = placeEntry(place("Fifth Avenue Social"))
+    // Every constant must survive the converter: it stores names, so a bad mapping throws
+    // on read rather than on write.
+    val byRating =
+      Rating.entries.associateWith { rating ->
+        dish(entry, "dish ${rating.name}").also { opinion(it, ana, rating, rating.name) }
+      }
 
-    val ordered = Rating.entries.toList()
-
-    assertTrue(ordered.indexOf(Rating.MID) < ordered.indexOf(Rating.PHENOMENAL))
-    assertTrue(ordered.indexOf(Rating.PHENOMENAL) < ordered.indexOf(Rating.LIFE_CHANGING))
+    byRating.forEach { (rating, dishId) ->
+      assertEquals(rating, db.dishOpinionDao().observeForDish(dishId).first().single().rating)
+    }
+    // "Fries mid" and "changed our lives" are both expressible, and ordered.
+    assertTrue(Rating.MID.ordinal < Rating.PHENOMENAL.ordinal)
+    assertTrue(Rating.PHENOMENAL.ordinal < Rating.LIFE_CHANGING.ordinal)
   }
 
   // ---- 7. Food and service are judged separately --------------------------------------
@@ -158,21 +212,19 @@ class AcceptanceSpecTest {
   fun placeEntry_ratesFoodAndServiceIndependently() = runTest {
     // Divine pasta, rude servers — one number cannot hold both.
     val entryId = placeEntry(place("Hotel Brannock"))
-    val entry = db.placeEntryDao().byId(entryId)!!
-    db
-      .placeEntryDao()
-      .update(
-        entry.copy(
-          foodRating = Rating.LIFE_CHANGING,
-          serviceRating = Rating.BAD,
-          revisitIntent = RevisitIntent.WAIT,
-        )
+    updateEntry(entryId) {
+      it.copy(
+        foodRating = Rating.LIFE_CHANGING,
+        serviceRating = Rating.BAD,
+        revisitIntent = RevisitIntent.WAIT,
       )
+    }
 
     val updated = db.placeEntryDao().byId(entryId)!!
 
     assertEquals(Rating.LIFE_CHANGING, updated.foodRating)
     assertEquals(Rating.BAD, updated.serviceRating)
+    assertEquals(later, updated.updatedAt)
   }
 
   // ---- 8. A want can belong to one person rather than the whole list ------------------
@@ -180,14 +232,14 @@ class AcceptanceSpecTest {
   @Test
   fun dishInterest_canBeScopedToOnePerson() = runTest {
     val robin = person("Robin", household = true)
+    val entry = placeEntry(place("Fifth Avenue Social"))
     // "robin wants chicken" / "Have Robin get mac and cheese as her side"
-    val placeId = place("Fifth Avenue Social")
-    interest(dish(placeId, "chicken"), DishStatus.WANT, forPerson = robin)
-    interest(dish(placeId, "wedge salad"), DishStatus.WANT)
+    interest(dish(entry, "chicken"), DishStatus.WANT, forPerson = robin)
+    interest(dish(entry, "wedge salad"), DishStatus.WANT)
 
     val wants = db.dishInterestDao().observeByStatus(listId, DishStatus.WANT).first()
 
-    assertEquals(1, wants.count { it.forPersonId == robin })
+    assertEquals(robin, wants.single { it.forPersonId != null }.forPersonId)
     assertEquals(1, wants.count { it.forPersonId == null })
   }
 
@@ -197,13 +249,16 @@ class AcceptanceSpecTest {
   fun dishInterest_recordsWhoRecommendedIt() = runTest {
     // "Dale and Marvin agrees and recommends chicken pot pie"
     val dale = person("Dale", household = false)
-    val dishId = dish(place("Fifth Avenue Social"), "chicken pot pie")
-    interest(dishId, DishStatus.WANT, recommendedBy = dale)
+    interest(
+      dish(placeEntry(place("Fifth Avenue Social")), "chicken pot pie"),
+      DishStatus.WANT,
+      recommendedBy = dale,
+    )
 
-    val wants = db.dishInterestDao().observeByStatus(listId, DishStatus.WANT).first()
+    val want = db.dishInterestDao().observeByStatus(listId, DishStatus.WANT).first().single()
 
-    assertEquals(dale, wants.single().recommendedById)
-    assertEquals(false, db.personDao().byId(dale)!!.isHouseholdMember)
+    assertEquals(dale, want.recommendedById)
+    assertEquals(false, db.personDao().byId(want.recommendedById!!)!!.isHouseholdMember)
   }
 
   // ---- 10. A place can carry a pricing or policy warning ------------------------------
@@ -224,13 +279,15 @@ class AcceptanceSpecTest {
   @Test
   fun placeEntry_recordsRevisitIntent() = runTest {
     val entryId = placeEntry(place("Hotel Brannock"))
-    val entry = db.placeEntryDao().byId(entryId)!!
     // "Probably wait to come back"
-    db
-      .placeEntryDao()
-      .update(entry.copy(revisitIntent = RevisitIntent.WAIT, status = PlaceStatus.VISITED))
+    updateEntry(entryId) {
+      it.copy(revisitIntent = RevisitIntent.WAIT, status = PlaceStatus.VISITED)
+    }
 
-    assertEquals(RevisitIntent.WAIT, db.placeEntryDao().byId(entryId)!!.revisitIntent)
+    val updated = db.placeEntryDao().byId(entryId)!!
+
+    assertEquals(RevisitIntent.WAIT, updated.revisitIntent)
+    assertEquals(PlaceStatus.VISITED, updated.status)
   }
 
   // ---- 12. How to order it is part of the want ----------------------------------------
@@ -238,9 +295,9 @@ class AcceptanceSpecTest {
   @Test
   fun dishInterest_keepsOrderingInstructions() = runTest {
     // "Order the barrel potatoes and add a Chilli bomb to it" / "Ruben (chopped)"
-    val placeId = place("Halberd")
-    interest(dish(placeId, "barrel potatoes"), DishStatus.WANT, modification = "add a Chilli bomb")
-    interest(dish(placeId, "reuben"), DishStatus.WANT, modification = "chopped")
+    val entry = placeEntry(place("Halberd"))
+    interest(dish(entry, "barrel potatoes"), DishStatus.WANT, modification = "add a Chilli bomb")
+    interest(dish(entry, "reuben"), DishStatus.WANT, modification = "chopped")
 
     val wants = db.dishInterestDao().observeByStatus(listId, DishStatus.WANT).first()
 
@@ -254,14 +311,25 @@ class AcceptanceSpecTest {
 
   @Test
   fun place_disambiguatesBranches() = runTest {
-    val kansas = place("Fifth Avenue Social", branch = "Kansas")
-    val other = place("Fifth Avenue Social", branch = "Plaza")
+    place("Fifth Avenue Social", branch = "Kansas")
+    place("Fifth Avenue Social", branch = "Plaza")
 
     val found = db.placeDao().search("Fifth Avenue").first()
 
     assertEquals(2, found.size)
     assertEquals(setOf("Kansas", "Plaza"), found.mapNotNull { it.branchLabel }.toSet())
-    assertTrue(kansas != other)
+  }
+
+  @Test
+  fun placeSearch_treatsWildcardsAsLiteralText() = runTest {
+    place("Halberd")
+    place("100% Pizza")
+
+    // A stray "%" must not behave as "match everything".
+    assertEquals(
+      listOf("100% Pizza"),
+      db.placeDao().search(escapeLike("%")).first().map { it.name },
+    )
   }
 
   // ---- 14. Free text survives whatever was typed, including truncation ----------------
@@ -271,14 +339,135 @@ class AcceptanceSpecTest {
     val messy = "- great for pizza, menu doesn't "
     val placeId = place("Halberd", note = messy)
     val entryId = placeEntry(placeId)
-    val entry = db.placeEntryDao().byId(entryId)!!
-    db.placeEntryDao().update(entry.copy(note = "Servers are rude\nSERVICE HORRIBLE"))
+    updateEntry(entryId) { it.copy(note = "Servers are rude\nSERVICE HORRIBLE") }
 
     assertEquals(messy, db.placeDao().byId(placeId)!!.note)
     assertTrue(db.placeEntryDao().byId(entryId)!!.note.contains("\n"))
   }
 
+  // ---- Constraints. The expensive-to-change part, so it is asserted too ---------------
+
+  @Test
+  fun placeCannotBeAddedToTheSameListTwice() = runTest {
+    val placeId = place("Halberd")
+    placeEntry(placeId)
+
+    assertConstraintViolation { placeEntry(placeId) }
+  }
+
+  @Test
+  fun rowsCannotReferenceAMissingParent() = runTest {
+    assertConstraintViolation {
+      db
+        .dishDao()
+        .insert(
+          DishEntity(
+            placeEntryId = "no-such-entry",
+            canonicalName = "ghost",
+            normalizedName = "ghost",
+            createdAt = now,
+            updatedAt = now,
+          )
+        )
+    }
+  }
+
+  @Test
+  fun hardDeletingAPlaceEntry_cascadesToItsDishesAndOpinions() = runTest {
+    val entry = placeEntry(place("Cafe Mirabel"))
+    val dishId = dish(entry, "arancini")
+    opinion(dishId, ana, Rating.BAD, "bad")
+
+    db.openHelper.writableDatabase.execSQL("DELETE FROM place_entries WHERE id = '$entry'")
+
+    assertNull(db.dishDao().byId(dishId))
+    assertEquals(0, db.dishOpinionDao().observeForDish(dishId).first().size)
+  }
+
+  @Test
+  fun aPersonIsNotScopedToOneList_soAnyListCanCiteThem() = runTest {
+    val otherList = newId()
+    db
+      .placeListDao()
+      .insert(PlaceListEntity(id = otherList, name = "Mine", createdAt = now, updatedAt = now))
+    val entryInOtherList =
+      newId().also {
+        db
+          .placeEntryDao()
+          .insert(
+            PlaceEntryEntity(
+              id = it,
+              placeListId = otherList,
+              placeId = place("The Lamplight"),
+              createdAt = now,
+              updatedAt = now,
+            )
+          )
+      }
+
+    // `ana` was created in the context of the first list; citing her from another must work.
+    val dishId = dish(entryInOtherList, "mac and cheese")
+    opinion(dishId, ana, Rating.EXCELLENT, "great")
+
+    assertEquals(ana, db.dishOpinionDao().observeForDish(dishId).first().single().authorId)
+  }
+
+  @Test
+  fun listsDoNotSeeEachOthersDishes() = runTest {
+    val shared = placeEntry(place("Cafe Mirabel"))
+    val privateList = newId()
+    db
+      .placeListDao()
+      .insert(PlaceListEntity(id = privateList, name = "Mine", createdAt = now, updatedAt = now))
+    val privateEntry =
+      newId().also {
+        db
+          .placeEntryDao()
+          .insert(
+            PlaceEntryEntity(
+              id = it,
+              placeListId = privateList,
+              // deliberately the same restaurant, in a different list
+              placeId = db.placeEntryDao().byId(shared)!!.placeId,
+              createdAt = now,
+              updatedAt = now,
+            )
+          )
+      }
+    dish(privateEntry, "a dish only I know about")
+
+    assertEquals(0, db.dishDao().observeForPlaceEntry(shared).first().size)
+    assertEquals(1, db.dishDao().observeForPlaceEntry(privateEntry).first().size)
+  }
+
+  @Test
+  fun softDeletedRowsAreHiddenFromReads() = runTest {
+    val entryId = placeEntry(place("Halberd"))
+    assertNotNull(db.placeEntryDao().observeForList(listId).first().singleOrNull())
+
+    updateEntry(entryId) { it.copy(deletedAt = later) }
+
+    assertEquals(0, db.placeEntryDao().observeForList(listId).first().size)
+    // The row itself survives, because M3 sync has to propagate the tombstone.
+    assertNotNull(db.placeEntryDao().byId(entryId))
+  }
+
   // ---- helpers -----------------------------------------------------------------------
+
+  /**
+   * Asserts the database rejects [block]. Runs it with `runBlocking` rather than `runTest`: a
+   * nested `runTest` fails with IllegalStateException before SQLite is ever reached, which would
+   * make these constraint tests pass for the wrong reason.
+   */
+  private fun assertConstraintViolation(block: suspend () -> Unit) {
+    assertThrows(SQLiteConstraintException::class.java) { runBlocking { block() } }
+  }
+
+  /** Mirrors what repositories must do: mutate, then stamp [updatedAt]. */
+  private suspend fun updateEntry(entryId: String, change: (PlaceEntryEntity) -> PlaceEntryEntity) {
+    val current = db.placeEntryDao().byId(entryId)!!
+    db.placeEntryDao().update(change(current).copy(updatedAt = later))
+  }
 
   private suspend fun person(name: String, household: Boolean): String =
     newId().also {
@@ -287,8 +476,8 @@ class AcceptanceSpecTest {
         .insert(
           PersonEntity(
             id = it,
-            placeListId = listId,
             name = name,
+            normalizedName = normalizeDishName(name),
             isHouseholdMember = household,
             createdAt = now,
             updatedAt = now,
@@ -355,8 +544,21 @@ class AcceptanceSpecTest {
         )
     }
 
+  private suspend fun attend(visitId: String, personId: String) {
+    db
+      .visitDao()
+      .addAttendee(
+        VisitAttendeeEntity(
+          visitId = visitId,
+          personId = personId,
+          createdAt = now,
+          updatedAt = now,
+        )
+      )
+  }
+
   private suspend fun dish(
-    placeId: String,
+    placeEntryId: String,
     name: String,
     aliases: List<String> = emptyList(),
   ): String =
@@ -366,8 +568,9 @@ class AcceptanceSpecTest {
         .insert(
           DishEntity(
             id = id,
-            placeId = placeId,
+            placeEntryId = placeEntryId,
             canonicalName = name,
+            normalizedName = normalizeDishName(name),
             createdAt = now,
             updatedAt = now,
           )
@@ -376,7 +579,13 @@ class AcceptanceSpecTest {
         db
           .dishDao()
           .insertAlias(
-            DishAliasEntity(dishId = id, alias = alias, normalized = alias.lowercase().trim())
+            DishAliasEntity(
+              dishId = id,
+              alias = alias,
+              normalized = normalizeDishName(alias),
+              createdAt = now,
+              updatedAt = now,
+            )
           )
       }
     }
@@ -395,7 +604,6 @@ class AcceptanceSpecTest {
           DishInterestEntity(
             id = it,
             dishId = dishId,
-            placeListId = listId,
             status = status,
             forPersonId = forPerson,
             recommendedById = recommendedBy,

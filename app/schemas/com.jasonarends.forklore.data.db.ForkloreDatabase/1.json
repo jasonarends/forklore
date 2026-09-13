@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "aa1a250afa0667f8925a171fecf943fe",
+    "identityHash": "6c3cd86125705ccabf501a4a5928c4e2",
     "entities": [
       {
         "tableName": "place_lists",
@@ -47,7 +47,7 @@
       },
       {
         "tableName": "people",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `placeListId` TEXT NOT NULL, `name` TEXT NOT NULL, `isHouseholdMember` INTEGER NOT NULL, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `normalizedName` TEXT NOT NULL, `isHouseholdMember` INTEGER NOT NULL, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -56,14 +56,14 @@
             "notNull": true
           },
           {
-            "fieldPath": "placeListId",
-            "columnName": "placeListId",
+            "fieldPath": "name",
+            "columnName": "name",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "name",
-            "columnName": "name",
+            "fieldPath": "normalizedName",
+            "columnName": "normalizedName",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -105,13 +105,13 @@
         },
         "indices": [
           {
-            "name": "index_people_placeListId",
-            "unique": false,
+            "name": "index_people_normalizedName",
+            "unique": true,
             "columnNames": [
-              "placeListId"
+              "normalizedName"
             ],
             "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_people_placeListId` ON `${TABLE_NAME}` (`placeListId`)"
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_people_normalizedName` ON `${TABLE_NAME}` (`normalizedName`)"
           }
         ]
       },
@@ -200,7 +200,19 @@
           "columnNames": [
             "id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_places_provider_providerId",
+            "unique": false,
+            "columnNames": [
+              "provider",
+              "providerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_places_provider_providerId` ON `${TABLE_NAME}` (`provider`, `providerId`)"
+          }
+        ]
       },
       {
         "tableName": "place_entries",
@@ -444,8 +456,14 @@
       },
       {
         "tableName": "visit_attendees",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`visitId` TEXT NOT NULL, `personId` TEXT NOT NULL, PRIMARY KEY(`visitId`, `personId`), FOREIGN KEY(`visitId`) REFERENCES `visits`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`personId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `visitId` TEXT NOT NULL, `personId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`visitId`) REFERENCES `visits`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`personId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
           {
             "fieldPath": "visitId",
             "columnName": "visitId",
@@ -457,13 +475,29 @@
             "columnName": "personId",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "visitId",
-            "personId"
+            "id"
           ]
         },
         "indices": [
@@ -484,6 +518,16 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_visit_attendees_personId` ON `${TABLE_NAME}` (`personId`)"
+          },
+          {
+            "name": "index_visit_attendees_visitId_personId",
+            "unique": true,
+            "columnNames": [
+              "visitId",
+              "personId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_visit_attendees_visitId_personId` ON `${TABLE_NAME}` (`visitId`, `personId`)"
           }
         ],
         "foreignKeys": [
@@ -513,7 +557,7 @@
       },
       {
         "tableName": "dishes",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `placeId` TEXT NOT NULL, `canonicalName` TEXT NOT NULL, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `placeEntryId` TEXT NOT NULL, `canonicalName` TEXT NOT NULL, `normalizedName` TEXT NOT NULL, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`placeEntryId`) REFERENCES `place_entries`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -522,14 +566,20 @@
             "notNull": true
           },
           {
-            "fieldPath": "placeId",
-            "columnName": "placeId",
+            "fieldPath": "placeEntryId",
+            "columnName": "placeEntryId",
             "affinity": "TEXT",
             "notNull": true
           },
           {
             "fieldPath": "canonicalName",
             "columnName": "canonicalName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalizedName",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -565,22 +615,32 @@
         },
         "indices": [
           {
-            "name": "index_dishes_placeId",
+            "name": "index_dishes_placeEntryId",
             "unique": false,
             "columnNames": [
-              "placeId"
+              "placeEntryId"
             ],
             "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_dishes_placeId` ON `${TABLE_NAME}` (`placeId`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_dishes_placeEntryId` ON `${TABLE_NAME}` (`placeEntryId`)"
+          },
+          {
+            "name": "index_dishes_placeEntryId_normalizedName",
+            "unique": true,
+            "columnNames": [
+              "placeEntryId",
+              "normalizedName"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_dishes_placeEntryId_normalizedName` ON `${TABLE_NAME}` (`placeEntryId`, `normalizedName`)"
           }
         ],
         "foreignKeys": [
           {
-            "table": "places",
+            "table": "place_entries",
             "onDelete": "CASCADE",
             "onUpdate": "NO ACTION",
             "columns": [
-              "placeId"
+              "placeEntryId"
             ],
             "referencedColumns": [
               "id"
@@ -590,7 +650,7 @@
       },
       {
         "tableName": "dish_aliases",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `dishId` TEXT NOT NULL, `alias` TEXT NOT NULL, `normalized` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`dishId`) REFERENCES `dishes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `dishId` TEXT NOT NULL, `alias` TEXT NOT NULL, `normalized` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`dishId`) REFERENCES `dishes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -615,6 +675,23 @@
             "columnName": "normalized",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -660,7 +737,7 @@
       },
       {
         "tableName": "dish_interests",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `dishId` TEXT NOT NULL, `placeListId` TEXT NOT NULL, `status` TEXT NOT NULL, `forPersonId` TEXT, `recommendedById` TEXT, `modification` TEXT, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`dishId`) REFERENCES `dishes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`placeListId`) REFERENCES `place_lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`forPersonId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`recommendedById`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `dishId` TEXT NOT NULL, `status` TEXT NOT NULL, `forPersonId` TEXT, `recommendedById` TEXT, `modification` TEXT, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`dishId`) REFERENCES `dishes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`forPersonId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`recommendedById`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
         "fields": [
           {
             "fieldPath": "id",
@@ -671,12 +748,6 @@
           {
             "fieldPath": "dishId",
             "columnName": "dishId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "placeListId",
-            "columnName": "placeListId",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -742,15 +813,6 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_dish_interests_dishId` ON `${TABLE_NAME}` (`dishId`)"
           },
           {
-            "name": "index_dish_interests_placeListId",
-            "unique": false,
-            "columnNames": [
-              "placeListId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_dish_interests_placeListId` ON `${TABLE_NAME}` (`placeListId`)"
-          },
-          {
             "name": "index_dish_interests_forPersonId",
             "unique": false,
             "columnNames": [
@@ -776,17 +838,6 @@
             "onUpdate": "NO ACTION",
             "columns": [
               "dishId"
-            ],
-            "referencedColumns": [
-              "id"
-            ]
-          },
-          {
-            "table": "place_lists",
-            "onDelete": "CASCADE",
-            "onUpdate": "NO ACTION",
-            "columns": [
-              "placeListId"
             ],
             "referencedColumns": [
               "id"
@@ -905,6 +956,16 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_dish_opinions_visitId` ON `${TABLE_NAME}` (`visitId`)"
+          },
+          {
+            "name": "index_dish_opinions_dishId_authorId",
+            "unique": false,
+            "columnNames": [
+              "dishId",
+              "authorId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_dish_opinions_dishId_authorId` ON `${TABLE_NAME}` (`dishId`, `authorId`)"
           }
         ],
         "foreignKeys": [
@@ -946,7 +1007,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'aa1a250afa0667f8925a171fecf943fe')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6c3cd86125705ccabf501a4a5928c4e2')"
     ]
   }
 }
