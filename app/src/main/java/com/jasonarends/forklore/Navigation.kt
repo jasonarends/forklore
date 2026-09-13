@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.jasonarends.forklore.ui.addplace.AddPlaceScreen
 import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
@@ -19,6 +21,15 @@ fun MainNavigation() {
   NavDisplay(
     backStack = backStack,
     onBack = { backStack.removeLastOrNull() },
+    // Without these, entries share the host's single ViewModelStore/saved-state holder instead
+    // of getting their own: a screen popped off the back stack and pushed again (e.g. AddPlace,
+    // visited twice in one app launch) gets back the *same* ViewModel instance, stale state and
+    // all, rather than a fresh one.
+    entryDecorators =
+      listOf(
+        rememberSaveableStateHolderNavEntryDecorator(),
+        rememberViewModelStoreNavEntryDecorator(),
+      ),
     entryProvider =
       entryProvider {
         entry<Main> {

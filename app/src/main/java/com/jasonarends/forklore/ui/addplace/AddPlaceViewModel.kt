@@ -22,8 +22,18 @@ class AddPlaceViewModel(
   private val placeListId: StateFlow<String?>,
 ) : ViewModel() {
 
-  private val _uiState = MutableStateFlow(AddPlaceUiState())
+  private val _uiState =
+    MutableStateFlow(AddPlaceUiState(placeListReady = placeListId.value != null))
   val uiState: StateFlow<AddPlaceUiState> = _uiState.asStateFlow()
+
+  init {
+    // The default list is created asynchronously at app startup (see ForkloreApp), so it may
+    // still be null when this screen first opens. Save stays disabled until it resolves rather
+    // than silently no-opping on a tap.
+    viewModelScope.launch {
+      placeListId.collect { id -> _uiState.update { it.copy(placeListReady = id != null) } }
+    }
+  }
 
   fun onNameChange(value: String) {
     _uiState.update { it.copy(name = value) }
@@ -45,13 +55,19 @@ class AddPlaceViewModel(
     _uiState.update { it.copy(warning = value) }
   }
 
-  /** No-op on a blank name: the button that calls this is disabled for that case too. */
+  /**
+   * No-op on a blank name, a not-yet-ready list, or a save already in flight — the Save button is
+   * disabled for all three, but a double tap can still land two calls here before the first
+   * recomposition, so `saving` is set synchronously (not inside the launched coroutine) to make the
+   * second call see it.
+   */
   fun save() {
     val state = _uiState.value
     val name = state.name.trim()
     val listId = placeListId.value
-    if (name.isEmpty() || listId == null) return
+    if (name.isEmpty() || listId == null || state.saving) return
 
+    _uiState.update { it.copy(saving = true) }
     viewModelScope.launch {
       placeRepository.addPlaceToList(
         placeListId = listId,
@@ -61,7 +77,7 @@ class AddPlaceViewModel(
         note = state.note,
         warning = state.warning.trim().ifBlank { null },
       )
-      _uiState.update { it.copy(saved = true) }
+      _uiState.update { it.copy(saving = false, saved = true) }
     }
   }
 
@@ -81,5 +97,7 @@ data class AddPlaceUiState(
   val address: String = "",
   val note: String = "",
   val warning: String = "",
+  val placeListReady: Boolean = false,
+  val saving: Boolean = false,
   val saved: Boolean = false,
 )

@@ -77,7 +77,6 @@ internal fun AddPlaceForm(
       label = { Text("Name") },
       modifier = Modifier.fillMaxWidth(),
       keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-      isError = state.name.isBlank(),
     )
     OutlinedTextField(
       value = state.branchLabel,
@@ -97,7 +96,12 @@ internal fun AddPlaceForm(
     NoteField(value = state.warning, onValueChange = onWarningChange, label = "Warning")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       TextButton(onClick = onCancel) { Text("Cancel") }
-      Button(onClick = onSave, enabled = state.name.isNotBlank()) { Text("Save") }
+      Button(
+        onClick = onSave,
+        enabled = state.name.isNotBlank() && state.placeListReady && !state.saving,
+      ) {
+        Text("Save")
+      }
     }
   }
 }

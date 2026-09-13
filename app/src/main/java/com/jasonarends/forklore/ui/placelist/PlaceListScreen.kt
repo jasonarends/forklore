@@ -2,10 +2,11 @@ package com.jasonarends.forklore.ui.placelist
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -59,12 +60,17 @@ internal fun PlaceList(
   onPlaceClick: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(modifier) {
-    Button(onClick = onAddPlace, modifier = Modifier.fillMaxWidth()) { Text("Add a place") }
+  // LazyColumn, not Column+forEach: once people can add places the list has to scroll rather
+  // than overflow. The add button rides along as a header item rather than living outside the
+  // scrollable area.
+  LazyColumn(modifier) {
+    item {
+      Button(onClick = onAddPlace, modifier = Modifier.fillMaxWidth()) { Text("Add a place") }
+    }
     if (entries.isEmpty()) {
-      EmptyState("Nothing here yet — add the first place you don't want to forget.")
+      item { EmptyState("Nothing here yet — add the first place you don't want to forget.") }
     } else {
-      entries.forEach { entry ->
+      items(entries, key = { it.entry.id }) { entry ->
         Row(
           modifier =
             Modifier.fillMaxWidth()

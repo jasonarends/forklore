@@ -61,7 +61,7 @@ class AddPlaceFormTest {
     var saved = false
     composeTestRule.setContent {
       AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd"),
+        state = AddPlaceUiState(name = "Halberd", placeListReady = true),
         onNameChange = {},
         onBranchLabelChange = {},
         onAddressChange = {},
@@ -75,6 +75,42 @@ class AddPlaceFormTest {
     composeTestRule.onNodeWithText("Save").performScrollTo().assertIsEnabled().performClick()
 
     assertEquals(true, saved)
+  }
+
+  @Test
+  fun save_isDisabledWhileTheDefaultListIsStillLoading() {
+    composeTestRule.setContent {
+      AddPlaceForm(
+        state = AddPlaceUiState(name = "Halberd", placeListReady = false),
+        onNameChange = {},
+        onBranchLabelChange = {},
+        onAddressChange = {},
+        onNoteChange = {},
+        onWarningChange = {},
+        onSave = {},
+        onCancel = {},
+      )
+    }
+
+    composeTestRule.onNodeWithText("Save").performScrollTo().assertIsNotEnabled()
+  }
+
+  @Test
+  fun save_isDisabledWhileASaveIsAlreadyInFlight() {
+    composeTestRule.setContent {
+      AddPlaceForm(
+        state = AddPlaceUiState(name = "Halberd", placeListReady = true, saving = true),
+        onNameChange = {},
+        onBranchLabelChange = {},
+        onAddressChange = {},
+        onNoteChange = {},
+        onWarningChange = {},
+        onSave = {},
+        onCancel = {},
+      )
+    }
+
+    composeTestRule.onNodeWithText("Save").performScrollTo().assertIsNotEnabled()
   }
 
   @Test
