@@ -1,6 +1,7 @@
 package com.jasonarends.forklore
 
 import android.os.Looper
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -9,6 +10,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,9 +22,9 @@ import org.robolectric.Shadows.shadowOf
 
 /**
  * End-to-end coverage for the real Navigation3 wiring (the real [ForkloreApp], not a fake
- * container) — the level the entryDecorators bug in issue #1's review actually lives at. A
- * ViewModel- or repository-level test can't see it: it's specifically about whether NavDisplay
- * gives each back-stack entry its own ViewModelStore.
+ * container). The entryDecorators regression lives at this level and nowhere below it: without
+ * per-entry ViewModelStores, the same destination visited twice gets back its stale ViewModel, and
+ * two different PlaceDetail entries share one — so edits land on the wrong row.
  */
 @RunWith(RobolectricTestRunner::class)
 class MainNavigationTest {
@@ -46,6 +51,43 @@ class MainNavigationTest {
 
     waitForListEntry("Halberd")
     waitForListEntry("Fifth Avenue Social")
+  }
+
+  @OptIn(ExperimentalTestApi::class)
+  @Test
+  fun navigatingFromOnePlaceEntryToAnother_showsTheSecondEntrysOwnData() = runTest {
+    val app = ApplicationProvider.getApplicationContext<ForkloreApp>()
+    val repository = app.container.placeRepository
+    val listId = app.container.placeListRepository.create("Test list")
+    val entryA = repository.addToList(listId, repository.addPlace("Halberd"))
+    val entryB = repository.addToList(listId, repository.addPlace("Cafe Mirabel"))
+    repository.updateEntry(entryA) { it.copy(note = "Note about Halberd") }
+    repository.updateEntry(entryB) { it.copy(note = "Note about Mirabel") }
+
+    val backStack = NavBackStack<NavKey>(Main)
+    composeTestRule.setContent { MainNavigation(backStack = backStack) }
+
+    composeTestRule.runOnIdle { backStack.add(PlaceDetail(entryA)) }
+    composeTestRule.waitUntilExactlyOneExists(hasText("Note about Halberd"))
+
+    // Back to the list, then into a different place entry.
+    composeTestRule.runOnIdle {
+      backStack.removeLastOrNull()
+      backStack.add(PlaceDetail(entryB))
+    }
+
+    // Real Room background threads mean Compose idling alone doesn't guarantee the second
+    // screen's query has landed, so wait for whichever note actually shows rather than asserting
+    // immediately after runOnIdle. Either note appearing resolves this quickly — the regression is
+    // which one it is, not how long it takes to show up.
+    composeTestRule.waitUntilExactlyOneExists(
+      hasText("Note about Mirabel") or hasText("Note about Halberd")
+    )
+
+    // Checked in this order deliberately: under the bug, this first assertion is the one that
+    // fails — and it fails by finding "Note about Halberd" still there, not by timing out.
+    composeTestRule.onNodeWithText("Note about Halberd").assertDoesNotExist()
+    composeTestRule.onNodeWithText("Note about Mirabel").assertExists()
   }
 
   @Test
