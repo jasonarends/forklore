@@ -1,4 +1,4 @@
-package com.jasonarends.forklore.ui.main
+package com.jasonarends.forklore.ui.placelist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -24,35 +24,35 @@ import kotlinx.coroutines.flow.stateIn
  * reaches the AppContainer.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class MainScreenViewModel(placeRepository: PlaceRepository, placeListId: StateFlow<String?>) :
+class PlaceListViewModel(placeRepository: PlaceRepository, placeListId: StateFlow<String?>) :
   ViewModel() {
 
-  val uiState: StateFlow<MainScreenUiState> =
+  val uiState: StateFlow<PlaceListUiState> =
     placeListId
       .flatMapLatest { id ->
-        if (id == null) MutableStateFlow(MainScreenUiState.Loading)
+        if (id == null) MutableStateFlow(PlaceListUiState.Loading)
         else
           placeRepository
             .observeList(id)
-            .map<List<PlaceEntryWithPlace>, MainScreenUiState>(MainScreenUiState::Success)
+            .map<List<PlaceEntryWithPlace>, PlaceListUiState>(PlaceListUiState::Success)
       }
-      .catch { emit(MainScreenUiState.Error(it)) }
-      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainScreenUiState.Loading)
+      .catch { emit(PlaceListUiState.Error(it)) }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaceListUiState.Loading)
 
   companion object {
     val Factory = viewModelFactory {
       initializer {
         val app = this[APPLICATION_KEY] as ForkloreApp
-        MainScreenViewModel(app.container.placeRepository, app.container.currentPlaceListId)
+        PlaceListViewModel(app.container.placeRepository, app.container.currentPlaceListId)
       }
     }
   }
 }
 
-sealed interface MainScreenUiState {
-  data object Loading : MainScreenUiState
+sealed interface PlaceListUiState {
+  data object Loading : PlaceListUiState
 
-  data class Error(val throwable: Throwable) : MainScreenUiState
+  data class Error(val throwable: Throwable) : PlaceListUiState
 
-  data class Success(val entries: List<PlaceEntryWithPlace>) : MainScreenUiState
+  data class Success(val entries: List<PlaceEntryWithPlace>) : PlaceListUiState
 }

@@ -1,14 +1,16 @@
-package com.jasonarends.forklore.ui.main
+package com.jasonarends.forklore.ui.placelist
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,7 +33,9 @@ class PlaceListTest {
               status = PlaceStatus.AVOID,
               foodRating = Rating.EXCELLENT,
             ),
-          )
+          ),
+        onAddPlace = {},
+        onPlaceClick = {},
       )
     }
 
@@ -45,9 +49,38 @@ class PlaceListTest {
 
   @Test
   fun tellsTheUserWhenTheListIsEmpty() {
-    composeTestRule.setContent { PlaceList(entries = emptyList()) }
+    composeTestRule.setContent {
+      PlaceList(entries = emptyList(), onAddPlace = {}, onPlaceClick = {})
+    }
 
-    composeTestRule.onNodeWithText("Nothing here yet.").assertExists()
+    composeTestRule
+      .onNodeWithText("Nothing here yet — add the first place you don't want to forget.")
+      .assertExists()
+  }
+
+  @Test
+  fun tappingAddPlace_invokesTheCallback() {
+    var clicked = false
+    composeTestRule.setContent {
+      PlaceList(entries = emptyList(), onAddPlace = { clicked = true }, onPlaceClick = {})
+    }
+
+    composeTestRule.onNodeWithText("Add a place").performClick()
+
+    assertEquals(true, clicked)
+  }
+
+  @Test
+  fun tappingAPlace_invokesTheCallbackWithItsEntryId() {
+    var clickedId: String? = null
+    val place = entry("Halberd")
+    composeTestRule.setContent {
+      PlaceList(entries = listOf(place), onAddPlace = {}, onPlaceClick = { clickedId = it })
+    }
+
+    composeTestRule.onNodeWithText("Halberd").performClick()
+
+    assertEquals(place.entry.id, clickedId)
   }
 
   private fun entry(

@@ -29,7 +29,7 @@ class AppContainer(context: Context, private val clock: Clock = Clock.System) {
 
   val placeListRepository by lazy { PlaceListRepository(database.placeListDao(), clock) }
   val placeRepository by lazy {
-    PlaceRepository(database.placeDao(), database.placeEntryDao(), clock)
+    PlaceRepository(database, database.placeDao(), database.placeEntryDao(), clock)
   }
   val personRepository by lazy { PersonRepository(database.personDao(), clock) }
   val visitRepository by lazy { VisitRepository(database.visitDao(), clock) }
