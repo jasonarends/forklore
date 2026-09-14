@@ -3,6 +3,7 @@ package com.jasonarends.forklore.data.repository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.jasonarends.forklore.data.db.ForkloreDatabase
+import com.jasonarends.forklore.data.db.PersonDao
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -18,6 +19,14 @@ import org.robolectric.RobolectricTestRunner
  * Runs against a real in-memory Room database, not a hand-written fake: a fake DAO has no unique
  * index of its own to enforce, so it can't catch [PersonRepository] getting the tombstone-aware
  * dedupe wrong the way the real `people` table's unique index on `normalizedName` does.
+ *
+ * The catch blocks in [PersonRepository.findOrCreate] and [PersonRepository.rename] exist for a
+ * genuine race — two calls whose *first* look-up both miss an in-flight collision — which real
+ * concurrency can't be made to exercise deterministically. The tests below force that miss instead:
+ * a [PersonDao] delegating to the real one but lying "not found" on its first
+ * `byNormalizedNameIncludingDeleted` call, so the write underneath still collides with the real
+ * unique index and the catch block is what has to resolve it. This is delegation to the real DAO,
+ * not a mock of it — every query but the rigged one still hits real SQLite.
  */
 @RunWith(RobolectricTestRunner::class)
 class PersonRepositoryTest {
@@ -156,5 +165,57 @@ class PersonRepositoryTest {
     repository.setHouseholdMember(id, true)
 
     assertEquals(false, db.personDao().byId(id)!!.isHouseholdMember)
+  }
+
+  @Test
+  fun findOrCreate_resolvesToTheWinner_whenTheInitialCheckMissesAConcurrentInsert() = runTest {
+    val winnerId = repository.findOrCreate("Dale")
+    val repositoryUnderTest = PersonRepository(missOnceDao(), Clock { now })
+
+    val resolvedId = repositoryUnderTest.findOrCreate("dale ")
+
+    assertEquals(winnerId, resolvedId)
+    assertEquals(1, db.personDao().observeAll().first().size)
+  }
+
+  @Test
+  fun findOrCreate_resurrectsATombstonedWinner_whenTheInitialCheckMissesTheCollision() = runTest {
+    val tombstonedId = repository.findOrCreate("Dale")
+    db.personDao().update(db.personDao().byId(tombstonedId)!!.copy(deletedAt = 5_000L))
+    now = 6_000L
+    val repositoryUnderTest = PersonRepository(missOnceDao(), Clock { now })
+
+    val resolvedId = repositoryUnderTest.findOrCreate("dale ")
+
+    assertEquals(tombstonedId, resolvedId)
+    val stored = db.personDao().byId(tombstonedId)!!
+    assertNull(stored.deletedAt)
+    assertEquals(6_000L, stored.updatedAt)
+    assertEquals(1, db.personDao().observeAll().first().size)
+  }
+
+  @Test
+  fun rename_reportsNameTaken_whenTheInitialCheckMissesALiveCollision() = runTest {
+    repository.findOrCreate("Marvin")
+    val dale = repository.findOrCreate("Dale")
+    val repositoryUnderTest = PersonRepository(missOnceDao(), Clock { now })
+
+    val result = repositoryUnderTest.rename(dale, "Marvin")
+
+    assertEquals(PersonRepository.RenameResult.NameTaken, result)
+    assertEquals("Dale", db.personDao().byId(dale)!!.name)
+  }
+
+  /**
+   * Delegates every query to the real DAO except the first `byNormalizedNameIncludingDeleted` call,
+   * which reports "not found" regardless of what's actually there — simulating a concurrent writer
+   * landing between the repository's check and its write.
+   */
+  private fun missOnceDao(): PersonDao {
+    var calls = 0
+    return object : PersonDao by db.personDao() {
+      override suspend fun byNormalizedNameIncludingDeleted(normalizedName: String) =
+        if (calls++ == 0) null else db.personDao().byNormalizedNameIncludingDeleted(normalizedName)
+    }
   }
 }

@@ -14,14 +14,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class PeopleViewModel(private val personRepository: PersonRepository) : ViewModel() {
-  private val _renameError = MutableStateFlow<RenameError?>(null)
+  private val _editing = MutableStateFlow<RenameEdit?>(null)
 
   val uiState: StateFlow<PeopleUiState> =
-    combine(personRepository.observeAll(), _renameError) { people, renameError ->
-        PeopleUiState.Success(people, renameError) as PeopleUiState
+    combine(personRepository.observeAll(), _editing) { people, editing ->
+        PeopleUiState.Success(people, editing) as PeopleUiState
       }
       .catch { emit(PeopleUiState.Error(it)) }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PeopleUiState.Loading)
@@ -35,22 +36,31 @@ class PeopleViewModel(private val personRepository: PersonRepository) : ViewMode
     viewModelScope.launch { personRepository.setHouseholdMember(id, isHouseholdMember) }
   }
 
-  /** The affected row owns showing/clearing its own error: see [RenameError.personId]. */
+  fun startRename(id: String) {
+    _editing.value = RenameEdit(id)
+  }
+
+  fun cancelRename() {
+    _editing.value = null
+  }
+
+  /**
+   * Stays in [RenameEdit] until the rename actually resolves: closing on [Unit] return (the old
+   * fire-and-forget shape) meant the row closed the instant Save was tapped, before there was any
+   * way to know whether it had succeeded.
+   */
   fun rename(id: String, name: String) {
     if (name.isBlank()) return
     viewModelScope.launch {
-      _renameError.value =
-        when (personRepository.rename(id, name)) {
-          PersonRepository.RenameResult.Success -> null
-          PersonRepository.RenameResult.NameTaken ->
-            RenameError(id, "Someone is already named \"${name.trim()}\".")
-          PersonRepository.RenameResult.NotFound -> null
+      when (personRepository.rename(id, name)) {
+        PersonRepository.RenameResult.Success,
+        PersonRepository.RenameResult.NotFound -> _editing.value = null
+        PersonRepository.RenameResult.NameTaken -> {
+          val message = "Someone is already named \"${name.trim()}\"."
+          _editing.update { current -> (current ?: RenameEdit(id)).copy(error = message) }
         }
+      }
     }
-  }
-
-  fun dismissRenameError() {
-    _renameError.value = null
   }
 
   companion object {
@@ -63,14 +73,18 @@ class PeopleViewModel(private val personRepository: PersonRepository) : ViewMode
   }
 }
 
-/** [personId] is who the error belongs to, so only that row shows it. */
-data class RenameError(val personId: String, val message: String)
+/**
+ * Which person's row is open for editing, and any error from the last attempt to [PeopleViewModel]
+ * `.rename` it. Owned by the ViewModel rather than row-local state so a `NameTaken` error can only
+ * ever be showing on the one row it's actually about.
+ */
+data class RenameEdit(val personId: String, val error: String? = null)
 
 sealed interface PeopleUiState {
   data object Loading : PeopleUiState
 
   data class Error(val throwable: Throwable) : PeopleUiState
 
-  data class Success(val people: List<PersonEntity>, val renameError: RenameError? = null) :
+  data class Success(val people: List<PersonEntity>, val editing: RenameEdit? = null) :
     PeopleUiState
 }

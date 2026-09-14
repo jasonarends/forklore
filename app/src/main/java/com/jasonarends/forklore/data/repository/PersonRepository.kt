@@ -26,12 +26,30 @@ class PersonRepository(private val personDao: PersonDao, private val clock: Cloc
   suspend fun findOrCreate(name: String, isHouseholdMember: Boolean = false): String {
     val normalized = normalizeDishName(name)
     val now = clock.nowMillis()
-    personDao.byNormalizedNameIncludingDeleted(normalized)?.let { existing ->
+
+    // Local, not a class member, so it can close over this call's `name`/`isHouseholdMember`
+    // rather than needing them threaded through as extra parameters at both call sites below.
+    // Resurrecting also refreshes `name` and `isHouseholdMember` to what was just typed: the
+    // tombstoned row's old values are exactly what a caller found stale enough to type over.
+    suspend fun resolveExisting(normalized: String, now: Long): String? {
+      val existing = personDao.byNormalizedNameIncludingDeleted(normalized) ?: return null
       if (existing.deletedAt != null) {
-        personDao.update(existing.copy(deletedAt = null, updatedAt = now))
+        personDao.update(
+          existing.copy(
+            deletedAt = null,
+            name = name.trim(),
+            isHouseholdMember = isHouseholdMember,
+            updatedAt = now,
+          )
+        )
       }
       return existing.id
     }
+
+    resolveExisting(normalized, now)?.let {
+      return it
+    }
+
     val person =
       PersonEntity(
         name = name.trim(),
@@ -44,7 +62,10 @@ class PersonRepository(private val personDao: PersonDao, private val clock: Cloc
       personDao.insert(person)
       person.id
     } catch (e: SQLiteConstraintException) {
-      personDao.byNormalizedNameIncludingDeleted(normalized)?.id ?: throw e
+      // Lost a race with a concurrent findOrCreate/rename for the same name; the winner might
+      // itself be a tombstone if it was mid-resurrection, so this goes through the same resolver
+      // rather than a bare lookup that could hand back a still-deleted id.
+      resolveExisting(normalized, now) ?: throw e
     }
   }
 

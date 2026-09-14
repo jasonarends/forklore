@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +16,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,11 +45,12 @@ fun PeopleScreen(
     is PeopleUiState.Success ->
       PeopleContent(
         people = current.people,
-        renameError = current.renameError,
+        editing = current.editing,
         onAddPerson = viewModel::addPerson,
         onToggleHousehold = viewModel::setHouseholdMember,
+        onStartRename = viewModel::startRename,
         onRename = viewModel::rename,
-        onDismissRenameError = viewModel::dismissRenameError,
+        onCancelRename = viewModel::cancelRename,
         modifier = modifier,
       )
     is PeopleUiState.Error ->
@@ -63,92 +65,77 @@ fun PeopleScreen(
  * pick", and forcing "is a household member" through that same shape only worked by relying on
  * `initiallyShowAll`/`allowReveal` escape hatches that existed for no other caller. `PersonPicker`
  * stays in `ui.components` for #5 (visit attendees), its first real caller, to use as intended.
+ *
+ * A `LazyColumn` rather than a `Column` in a scrollable modifier: this list has no natural cap, and
+ * `items(people, key = { it.id })` keeps each row's local text field tied to the person rather than
+ * to list position when a rename reorders the (name-sorted) list mid-edit.
  */
 @Composable
 internal fun PeopleContent(
   people: List<PersonEntity>,
-  renameError: RenameError?,
+  editing: RenameEdit?,
   onAddPerson: (String, Boolean) -> Unit,
   onToggleHousehold: (String, Boolean) -> Unit,
+  onStartRename: (String) -> Unit,
   onRename: (String, String) -> Unit,
-  onDismissRenameError: () -> Unit,
+  onCancelRename: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    SectionHeader("People")
+  LazyColumn(
+    modifier = modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    item { SectionHeader("People") }
     if (people.isEmpty()) {
-      EmptyState("No one yet. Add a person below.")
+      item { EmptyState("No one yet. Add a person below.") }
     }
-    people.forEach { person ->
+    items(people, key = { it.id }) { person ->
       PersonRow(
         person = person,
-        renameError = renameError?.takeIf { it.personId == person.id },
+        editing = editing?.takeIf { it.personId == person.id },
         onToggleHousehold = { isHouseholdMember ->
           onToggleHousehold(person.id, isHouseholdMember)
         },
+        onStartRename = { onStartRename(person.id) },
         onRename = { name -> onRename(person.id, name) },
-        onDismissRenameError = onDismissRenameError,
+        onCancelRename = onCancelRename,
       )
     }
-    AddPersonRow(onAddPerson = onAddPerson)
+    item { AddPersonRow(onAddPerson = onAddPerson) }
   }
 }
 
 @Composable
 private fun PersonRow(
   person: PersonEntity,
-  renameError: RenameError?,
+  editing: RenameEdit?,
   onToggleHousehold: (Boolean) -> Unit,
+  onStartRename: () -> Unit,
   onRename: (String) -> Unit,
-  onDismissRenameError: () -> Unit,
+  onCancelRename: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  var editing by remember(person.id) { mutableStateOf(false) }
-  var text by remember(person.id, person.name) { mutableStateOf(person.name) }
-  // Tracks the name a Save is waiting on, so the row can tell "no error yet because nothing was
-  // submitted" apart from "no error because the rename landed" — see the LaunchedEffect below.
-  var pendingSave by remember(person.id) { mutableStateOf<String?>(null) }
-
-  // Closes the row once the rename this row submitted actually lands in `person.name`, rather than
-  // when Save is tapped: a rejected rename must leave the field open with its error visible, not
-  // close over a name that was never saved.
-  LaunchedEffect(person.name, renameError) {
-    if (pendingSave != null && renameError == null && person.name == pendingSave) {
-      editing = false
-      pendingSave = null
-    }
-  }
+  val isEditing = editing != null
+  // Re-seeded from `person.name` every time editing starts, rather than hoisted: the ViewModel
+  // owns *whether* this row is editing (see PeopleViewModel.RenameEdit), but the in-progress text
+  // is exactly the transient, not-yet-committed kind of state CLAUDE.md carves out for a composable
+  // to hold locally.
+  var text by remember(person.id, isEditing) { mutableStateOf(person.name) }
 
   Column(modifier = modifier.fillMaxWidth()) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      if (editing) {
+      if (isEditing) {
         OutlinedTextField(
           value = text,
           onValueChange = { text = it },
           modifier = Modifier.weight(1f).testTag("person-rename-field-${person.id}"),
           singleLine = true,
         )
-        TextButton(
-          onClick = {
-            pendingSave = text
-            onRename(text)
-          }
-        ) {
-          Text("Save")
-        }
-        TextButton(
-          onClick = {
-            text = person.name
-            editing = false
-            pendingSave = null
-            if (renameError != null) onDismissRenameError()
-          }
-        ) {
-          Text("Cancel")
-        }
+        TextButton(onClick = { onRename(text) }) { Text("Save") }
+        TextButton(onClick = onCancelRename) { Text("Cancel") }
       } else {
         Text(person.name, modifier = Modifier.weight(1f))
         Switch(
@@ -158,15 +145,15 @@ private fun PersonRow(
         )
         TextButton(
           modifier = Modifier.testTag("person-rename-button-${person.id}"),
-          onClick = { editing = true },
+          onClick = onStartRename,
         ) {
           Text("Rename")
         }
       }
     }
-    if (editing && renameError != null) {
+    if (editing?.error != null) {
       Text(
-        renameError.message,
+        editing.error,
         color = MaterialTheme.colorScheme.error,
         modifier = Modifier.testTag("person-rename-error-${person.id}"),
       )

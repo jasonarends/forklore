@@ -27,11 +27,12 @@ class PeopleContentTest {
     compose.setContent {
       PeopleContent(
         people = emptyList(),
-        renameError = null,
+        editing = null,
         onAddPerson = { name, household -> added = name to household },
         onToggleHousehold = { _, _ -> },
+        onStartRename = {},
         onRename = { _, _ -> },
-        onDismissRenameError = {},
+        onCancelRename = {},
       )
     }
 
@@ -47,11 +48,12 @@ class PeopleContentTest {
     compose.setContent {
       PeopleContent(
         people = emptyList(),
-        renameError = null,
+        editing = null,
         onAddPerson = { name, household -> added = name to household },
         onToggleHousehold = { _, _ -> },
+        onStartRename = {},
         onRename = { _, _ -> },
-        onDismissRenameError = {},
+        onCancelRename = {},
       )
     }
 
@@ -69,11 +71,12 @@ class PeopleContentTest {
     compose.setContent {
       PeopleContent(
         people = listOf(robin),
-        renameError = null,
+        editing = null,
         onAddPerson = { _, _ -> },
         onToggleHousehold = { id, isHousehold -> toggled = id to isHousehold },
+        onStartRename = {},
         onRename = { _, _ -> },
-        onDismissRenameError = {},
+        onCancelRename = {},
       )
     }
 
@@ -83,83 +86,99 @@ class PeopleContentTest {
   }
 
   @Test
-  fun aRenameConflictStaysOnlyOnTheAffectedRow() {
+  fun tappingRenameStartsEditingThatPerson() {
     val dale = person("Dale", household = false)
-    val robin = person("Robin", household = false)
-    var renameError by mutableStateOf<RenameError?>(null)
+    var started: String? = null
+    // Declared outside setContent, not inside it: a `var ... by mutableStateOf` written directly
+    // in a composable body (no `remember`) is recreated from scratch on every recomposition, which
+    // would silently reset `editing` back to null right after the click sets it.
+    var editing by mutableStateOf<RenameEdit?>(null)
 
-    compose.setContent {
-      PeopleContent(
-        people = listOf(dale, robin),
-        renameError = renameError,
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onRename = { id, name ->
-          renameError = RenameError(id, "Someone is already named \"$name\".")
-        },
-        onDismissRenameError = { renameError = null },
-      )
-    }
-
-    compose.onNodeWithTag("person-rename-button-${dale.id}").performClick()
-    compose.onNodeWithTag("person-rename-field-${dale.id}").performTextReplacement("Robin")
-    compose.onNodeWithText("Save").performClick()
-
-    // The row stays open with the error visible, rather than closing over a rename that failed...
-    compose.onNodeWithTag("person-rename-field-${dale.id}").assertExists()
-    compose.onNodeWithTag("person-rename-error-${dale.id}").assertExists()
-    // ...and Robin's row, unaffected, shows no error of its own.
-    compose.onNodeWithTag("person-rename-button-${robin.id}").assertExists()
-  }
-
-  @Test
-  fun aSuccessfulRenameClosesTheRowOnceThePersonNameCatchesUp() {
-    val dale = person("Dale", household = false)
-    var people by mutableStateOf(listOf(dale))
-    var renameError by mutableStateOf<RenameError?>(null)
-
-    compose.setContent {
-      PeopleContent(
-        people = people,
-        renameError = renameError,
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onRename = { id, name ->
-          // Simulates Room's Flow re-emitting the renamed person once the rename lands.
-          people = people.map { if (it.id == id) it.copy(name = name) else it }
-          renameError = null
-        },
-        onDismissRenameError = { renameError = null },
-      )
-    }
-
-    compose.onNodeWithTag("person-rename-button-${dale.id}").performClick()
-    compose.onNodeWithTag("person-rename-field-${dale.id}").performTextReplacement("Dale R.")
-    compose.onNodeWithText("Save").performClick()
-
-    compose.onNodeWithText("Dale R.").assertExists()
-    compose.onNodeWithTag("person-rename-field-${dale.id}").assertDoesNotExist()
-  }
-
-  @Test
-  fun cancellingARenameDismissesItsError() {
-    val dale = person("Dale", household = false)
-    var dismissed = false
     compose.setContent {
       PeopleContent(
         people = listOf(dale),
-        renameError = RenameError(dale.id, "Someone is already named \"Robin\"."),
+        editing = editing,
         onAddPerson = { _, _ -> },
         onToggleHousehold = { _, _ -> },
+        onStartRename = { id ->
+          started = id
+          editing = RenameEdit(id)
+        },
         onRename = { _, _ -> },
-        onDismissRenameError = { dismissed = true },
+        onCancelRename = { editing = null },
       )
     }
 
     compose.onNodeWithTag("person-rename-button-${dale.id}").performClick()
+
+    assertEquals(dale.id, started)
+    compose.onNodeWithTag("person-rename-field-${dale.id}").assertExists()
+  }
+
+  @Test
+  fun savingARenameInvokesTheCallbackWithTheTypedText() {
+    val dale = person("Dale", household = false)
+    var renamed: Pair<String, String>? = null
+    compose.setContent {
+      PeopleContent(
+        people = listOf(dale),
+        editing = RenameEdit(dale.id),
+        onAddPerson = { _, _ -> },
+        onToggleHousehold = { _, _ -> },
+        onStartRename = {},
+        onRename = { id, name -> renamed = id to name },
+        onCancelRename = {},
+      )
+    }
+
+    compose.onNodeWithTag("person-rename-field-${dale.id}").performTextReplacement("Dale R.")
+    compose.onNodeWithText("Save").performClick()
+
+    assertEquals(dale.id to "Dale R.", renamed)
+  }
+
+  @Test
+  fun cancellingARenameInvokesTheCallback() {
+    val dale = person("Dale", household = false)
+    var cancelled = false
+    compose.setContent {
+      PeopleContent(
+        people = listOf(dale),
+        editing = RenameEdit(dale.id),
+        onAddPerson = { _, _ -> },
+        onToggleHousehold = { _, _ -> },
+        onStartRename = {},
+        onRename = { _, _ -> },
+        onCancelRename = { cancelled = true },
+      )
+    }
+
     compose.onNodeWithText("Cancel").performClick()
 
-    assertEquals(true, dismissed)
+    assertEquals(true, cancelled)
+  }
+
+  @Test
+  fun aRenameConflictShowsOnlyOnTheAffectedRow() {
+    val dale = person("Dale", household = false)
+    val robin = person("Robin", household = false)
+    compose.setContent {
+      PeopleContent(
+        people = listOf(dale, robin),
+        editing = RenameEdit(dale.id, "Someone is already named \"Robin\"."),
+        onAddPerson = { _, _ -> },
+        onToggleHousehold = { _, _ -> },
+        onStartRename = {},
+        onRename = { _, _ -> },
+        onCancelRename = {},
+      )
+    }
+
+    // Dale is mid-edit with the conflict visible...
+    compose.onNodeWithTag("person-rename-field-${dale.id}").assertExists()
+    compose.onNodeWithTag("person-rename-error-${dale.id}").assertExists()
+    // ...while Robin, uninvolved, still shows its plain "Rename" button, not an error of its own.
+    compose.onNodeWithTag("person-rename-button-${robin.id}").assertExists()
   }
 
   @Test
@@ -167,11 +186,12 @@ class PeopleContentTest {
     compose.setContent {
       PeopleContent(
         people = emptyList(),
-        renameError = null,
+        editing = null,
         onAddPerson = { _, _ -> },
         onToggleHousehold = { _, _ -> },
+        onStartRename = {},
         onRename = { _, _ -> },
-        onDismissRenameError = {},
+        onCancelRename = {},
       )
     }
 
