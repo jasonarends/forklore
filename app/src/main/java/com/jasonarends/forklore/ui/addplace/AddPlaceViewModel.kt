@@ -1,5 +1,6 @@
 package com.jasonarends.forklore.ui.addplace
 
+import android.database.sqlite.SQLiteException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -8,8 +9,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jasonarends.forklore.ForkloreApp
 import com.jasonarends.forklore.data.repository.PlaceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -22,37 +25,37 @@ class AddPlaceViewModel(
   private val placeListId: StateFlow<String?>,
 ) : ViewModel() {
 
-  private val _uiState =
-    MutableStateFlow(AddPlaceUiState(placeListReady = placeListId.value != null))
-  val uiState: StateFlow<AddPlaceUiState> = _uiState.asStateFlow()
+  // The form fields this screen actually owns. placeListReady is deliberately not stored here: it
+  // is derived below from placeListId, so there's exactly one source of truth for it rather than a
+  // seeded initial value plus a collector that has to keep it in sync.
+  private val _formState = MutableStateFlow(AddPlaceUiState())
 
-  init {
-    // The default list is created asynchronously at app startup (see ForkloreApp), so it may
-    // still be null when this screen first opens. Save stays disabled until it resolves rather
-    // than silently no-opping on a tap.
-    viewModelScope.launch {
-      placeListId.collect { id -> _uiState.update { it.copy(placeListReady = id != null) } }
-    }
-  }
+  val uiState: StateFlow<AddPlaceUiState> =
+    combine(_formState, placeListId) { form, listId -> form.copy(placeListReady = listId != null) }
+      .stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        AddPlaceUiState(placeListReady = placeListId.value != null),
+      )
 
   fun onNameChange(value: String) {
-    _uiState.update { it.copy(name = value) }
+    _formState.update { it.copy(name = value) }
   }
 
   fun onBranchLabelChange(value: String) {
-    _uiState.update { it.copy(branchLabel = value) }
+    _formState.update { it.copy(branchLabel = value) }
   }
 
   fun onAddressChange(value: String) {
-    _uiState.update { it.copy(address = value) }
+    _formState.update { it.copy(address = value) }
   }
 
   fun onNoteChange(value: String) {
-    _uiState.update { it.copy(note = value) }
+    _formState.update { it.copy(note = value) }
   }
 
   fun onWarningChange(value: String) {
-    _uiState.update { it.copy(warning = value) }
+    _formState.update { it.copy(warning = value) }
   }
 
   /**
@@ -62,22 +65,30 @@ class AddPlaceViewModel(
    * second call see it.
    */
   fun save() {
-    val state = _uiState.value
+    val state = _formState.value
     val name = state.name.trim()
     val listId = placeListId.value
     if (name.isEmpty() || listId == null || state.saving) return
 
-    _uiState.update { it.copy(saving = true) }
+    _formState.update { it.copy(saving = true, error = null) }
     viewModelScope.launch {
-      placeRepository.addPlaceToList(
-        placeListId = listId,
-        name = name,
-        branchLabel = state.branchLabel.trim().ifBlank { null },
-        address = state.address.trim().ifBlank { null },
-        note = state.note,
-        warning = state.warning.trim().ifBlank { null },
-      )
-      _uiState.update { it.copy(saving = false, saved = true) }
+      try {
+        placeRepository.addPlaceToList(
+          placeListId = listId,
+          name = name,
+          branchLabel = state.branchLabel.trim().ifBlank { null },
+          address = state.address.trim().ifBlank { null },
+          note = state.note,
+          warning = state.warning.trim().ifBlank { null },
+        )
+        _formState.update { it.copy(saving = false, saved = true) }
+      } catch (_: SQLiteException) {
+        // A write that fails (a full disk, a constraint violation) must not crash the app or
+        // leave Save stuck disabled forever — the person just needs to be able to try again.
+        _formState.update {
+          it.copy(saving = false, error = "Couldn't save this place. Try again.")
+        }
+      }
     }
   }
 
@@ -100,4 +111,5 @@ data class AddPlaceUiState(
   val placeListReady: Boolean = false,
   val saving: Boolean = false,
   val saved: Boolean = false,
+  val error: String? = null,
 )

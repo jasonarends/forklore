@@ -1,7 +1,7 @@
 package com.jasonarends.forklore.data.repository
 
-import androidx.room.RoomDatabase
 import androidx.room.withTransaction
+import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceDao
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryDao
@@ -19,9 +19,9 @@ import kotlinx.coroutines.flow.Flow
  * rather than hard-deleting, and escaping user input before it reaches LIKE.
  */
 class PlaceRepository(
+  private val database: ForkloreDatabase,
   private val placeDao: PlaceDao,
   private val placeEntryDao: PlaceEntryDao,
-  private val database: RoomDatabase,
   private val clock: Clock = Clock.System,
 ) {
   fun observeList(placeListId: String): Flow<List<PlaceEntryWithPlace>> =

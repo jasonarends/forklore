@@ -11,6 +11,7 @@ import com.jasonarends.forklore.testing.MainDispatcherRule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -27,7 +28,14 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class AddPlaceViewModelTest {
-  @get:Rule val mainDispatcherRule = MainDispatcherRule()
+  // Standard, not Unconfined: Unconfined runs viewModelScope.launch eagerly, so `saved == false`
+  // right after save() only proved true "by luck" — it happened to still be racing Room's real
+  // background thread rather than being genuinely gated on the coroutine not having run yet.
+  // Standard requires an explicit advanceUntilIdle() (see waitUntilSaved) before anything queued
+  // on it runs at all.
+  private val testDispatcher = StandardTestDispatcher()
+
+  @get:Rule val mainDispatcherRule = MainDispatcherRule(testDispatcher)
 
   private val now = 1_757_000_000_000L
   private lateinit var db: ForkloreDatabase
@@ -43,7 +51,7 @@ class AddPlaceViewModelTest {
         )
         .allowMainThreadQueries()
         .build()
-    repository = PlaceRepository(db.placeDao(), db.placeEntryDao(), db, Clock { now })
+    repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { now })
     listId = runBlocking {
       newId().also {
         db
@@ -75,9 +83,14 @@ class AddPlaceViewModelTest {
     viewModel.onNameChange("Halberd")
 
     viewModel.save()
+    // uiState is derived (combine(...).stateIn(..., SharingStarted.Eagerly, ...)), so its
+    // collector needs one turn of the dispatcher before it reflects save()'s synchronous
+    // `saving = true` at all.
+    testDispatcher.scheduler.advanceUntilIdle()
 
-    // The DAO insert genuinely hops to Room's background query executor, so the moment save()
-    // returns control here, the write has not landed yet — saved must still be false.
+    // That one turn is not enough to reach the repository call's own completion, though: the DAO
+    // insert genuinely hops to Room's background query executor, so the write has not landed yet
+    // — saved must still be false.
     assertEquals(true, viewModel.uiState.value.saving)
     assertEquals(false, viewModel.uiState.value.saved)
 
@@ -102,6 +115,22 @@ class AddPlaceViewModelTest {
   }
 
   @Test
+  fun save_recoversFromAWriteFailure_insteadOfCrashing() {
+    // "no-such-list" doesn't exist, so the entry insert violates the same-named foreign key
+    // AcceptanceSpecTest and PlaceRepositoryTest already exercise — a real, deterministic write
+    // failure with no mocking framework involved.
+    val viewModel = AddPlaceViewModel(repository, MutableStateFlow("no-such-list"))
+    viewModel.onNameChange("Halberd")
+
+    viewModel.save()
+    waitUntilSettled(viewModel)
+
+    assertEquals(false, viewModel.uiState.value.saving)
+    assertEquals(false, viewModel.uiState.value.saved)
+    assertEquals(true, viewModel.uiState.value.error != null)
+  }
+
+  @Test
   fun save_doesNothing_whileTheDefaultListIsStillLoading() {
     val placeListId = MutableStateFlow<String?>(null)
     val viewModel = AddPlaceViewModel(repository, placeListId)
@@ -116,10 +145,37 @@ class AddPlaceViewModelTest {
 
   private fun entriesInList(): List<*> = runBlocking { repository.observeList(listId).first() }
 
+  /**
+   * The queued continuation after save()'s repository call needs `advanceUntilIdle()` to run at all
+   * (see [testDispatcher]), but that call alone won't block for Room's real background thread — so
+   * this still polls, advancing the scheduler each pass to pick up the continuation the moment that
+   * real thread resumes it.
+   */
   private fun waitUntilSaved(viewModel: AddPlaceViewModel, timeoutMillis: Long = 5_000) {
+    waitUntilSettled(viewModel, timeoutMillis) { it.saved }
+  }
+
+  /** Settles on either outcome of a save: a success (`saved`) or a caught failure (`!saving`). */
+  private fun waitUntilSettled(viewModel: AddPlaceViewModel, timeoutMillis: Long = 5_000) {
+    waitUntilSettled(viewModel, timeoutMillis) { !it.saving }
+  }
+
+  /**
+   * Advances at least once before the first check: `uiState` is derived and its collector hasn't
+   * necessarily run its first turn yet, so checking the condition before advancing can read a stale
+   * seed value — e.g. `!saving` looks satisfied from `uiState`'s never-collected initial value,
+   * before the save this is meant to wait for has even started.
+   */
+  private fun waitUntilSettled(
+    viewModel: AddPlaceViewModel,
+    timeoutMillis: Long,
+    condition: (AddPlaceUiState) -> Boolean,
+  ) {
     val deadline = System.currentTimeMillis() + timeoutMillis
-    while (!viewModel.uiState.value.saved) {
-      check(System.currentTimeMillis() < deadline) { "Timed out waiting for save() to complete" }
+    while (true) {
+      testDispatcher.scheduler.advanceUntilIdle()
+      if (condition(viewModel.uiState.value)) return
+      check(System.currentTimeMillis() < deadline) { "Timed out waiting for save() to settle" }
       Thread.sleep(5)
     }
   }

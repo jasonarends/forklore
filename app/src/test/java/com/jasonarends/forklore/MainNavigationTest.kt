@@ -1,7 +1,6 @@
 package com.jasonarends.forklore
 
 import android.os.Looper
-import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -10,9 +9,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.test.core.app.ApplicationProvider
-import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,16 +24,6 @@ import org.robolectric.Shadows.shadowOf
 @RunWith(RobolectricTestRunner::class)
 class MainNavigationTest {
   @get:Rule val composeTestRule = createComposeRule()
-
-  @Before
-  fun setUp() {
-    ApplicationProvider.getApplicationContext<ForkloreApp>().deleteDatabase(DB_NAME)
-  }
-
-  @After
-  fun tearDown() {
-    ApplicationProvider.getApplicationContext<ForkloreApp>().deleteDatabase(DB_NAME)
-  }
 
   @Test
   fun addPlaceScreen_isUsableMoreThanOncePerAppLaunch() {
@@ -72,7 +58,7 @@ class MainNavigationTest {
     // Save starts disabled until the default list (created asynchronously at app startup)
     // resolves.
     waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
-      runCatching { composeTestRule.onAllNodesWithText("Save").filterToOne(isEnabled()) }.isSuccess
+      composeTestRule.onAllNodes(hasText("Save") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
     }
     // The form is taller than the test window, so Save is scrolled out of the clipped viewport;
     // an unscrolled performClick() lands off-screen and silently does nothing (see the identical
@@ -112,9 +98,5 @@ class MainNavigationTest {
       composeTestRule.onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty()
     }
     composeTestRule.onNodeWithText(name).assertExists()
-  }
-
-  private companion object {
-    const val DB_NAME = "forklore.db"
   }
 }

@@ -37,7 +37,7 @@ class PlaceRepositoryTest {
     val db = inMemoryDatabase()
     try {
       val listId = createList(db, "Ours")
-      val repository = PlaceRepository(db.placeDao(), db.placeEntryDao(), db, Clock { now })
+      val repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { now })
 
       repository.addPlaceToList(
         placeListId = listId,
@@ -69,7 +69,7 @@ class PlaceRepositoryTest {
     val db = inMemoryDatabase()
     try {
       val listId = createList(db, "Ours")
-      val repository = PlaceRepository(db.placeDao(), db.placeEntryDao(), db, Clock { now })
+      val repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { now })
 
       repository.addPlaceToList(placeListId = listId, name = "Halberd")
 
@@ -88,7 +88,7 @@ class PlaceRepositoryTest {
   fun addPlaceToList_rollsBackThePlace_whenTheEntryInsertFails() = runTest {
     val db = inMemoryDatabase()
     try {
-      val repository = PlaceRepository(db.placeDao(), db.placeEntryDao(), db, Clock { now })
+      val repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { now })
 
       // No list "no-such-list" exists, so the entry insert violates the foreign key. One
       // transaction means the Place half of the write must not survive that failure either.
@@ -104,15 +104,16 @@ class PlaceRepositoryTest {
 
   @Test
   fun placeAddedByHand_survivesARestart() = runTest {
+    // Robolectric gives every test its own fresh data dir, so there is no stale file from a
+    // previous run to clear first.
     val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-    context.deleteDatabase(DB_NAME)
 
     val firstRun = Room.databaseBuilder(context, ForkloreDatabase::class.java, DB_NAME).build()
     val listId: String
     try {
       listId = createList(firstRun, "Ours")
       val repository =
-        PlaceRepository(firstRun.placeDao(), firstRun.placeEntryDao(), firstRun, Clock { now })
+        PlaceRepository(firstRun, firstRun.placeDao(), firstRun.placeEntryDao(), Clock { now })
       repository.addPlaceToList(placeListId = listId, name = "Halberd", branchLabel = "Westport")
     } finally {
       // Simulates the process dying and Room reopening the same on-disk file, the way it does

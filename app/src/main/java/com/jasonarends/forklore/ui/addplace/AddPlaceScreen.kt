@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -94,6 +95,7 @@ internal fun AddPlaceForm(
     )
     NoteField(value = state.note, onValueChange = onNoteChange, label = "Note")
     NoteField(value = state.warning, onValueChange = onWarningChange, label = "Warning")
+    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       TextButton(onClick = onCancel) { Text("Cancel") }
       Button(
