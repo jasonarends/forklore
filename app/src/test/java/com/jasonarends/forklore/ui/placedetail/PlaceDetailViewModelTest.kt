@@ -16,9 +16,12 @@ import com.jasonarends.forklore.data.repository.PlaceRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -53,15 +56,8 @@ class PlaceDetailViewModelTest {
             ForkloreDatabase::class.java,
           )
           .allowMainThreadQueries()
-          // Room only reuses this transaction executor for suspend DAO calls made *while already
-          // inside* a database.withTransaction block (verified against the KSP-generated
-          // PlaceEntryDao_Impl and androidx.room.util.DBUtil.performSuspending/getCoroutineContext
-          // in the installed room-runtime-2.8.5 jar: absent an ambient TransactionElement, a call
-          // falls back to RoomDatabase.getQueryContext(), which wraps the query executor, not this
-          // one). PlaceRepository.updateEntry's read-modify-write runs inside withTransaction, so
-          // its writes land on this same-thread executor, keeping them visible to
-          // advanceUntilIdle(); observeById's Flow re-queries are independent of that transaction
-          // and still run on the query executor, left at Room's real default below.
+          // Room runs @Transaction reads, writes and withTransaction on this executor; same-thread
+          // keeps them visible to advanceUntilIdle().
           .setTransactionExecutor(Executor { it.run() })
           .build()
       repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { 0L })
@@ -89,9 +85,24 @@ class PlaceDetailViewModelTest {
         )
     }
 
-  @After fun tearDown() = db.close()
+  @After
+  fun tearDown() {
+    appScope.cancel()
+    db.close()
+  }
 
   private fun viewModel() = PlaceDetailViewModel(repository, entryId, appScope)
+
+  /** Backed by a real [ViewModelStore] so [ViewModelStore.clear] exercises the real lifecycle. */
+  private fun viewModelInStore(
+    store: ViewModelStore,
+    repository: PlaceRepository = this.repository,
+  ): PlaceDetailViewModel {
+    val factory = viewModelFactory {
+      initializer { PlaceDetailViewModel(repository, entryId, appScope) }
+    }
+    return ViewModelProvider(store, factory).get(PlaceDetailViewModel::class)
+  }
 
   @Test
   fun statusChanges_writeThroughImmediately() =
@@ -177,10 +188,7 @@ class PlaceDetailViewModelTest {
   fun clearingTheViewModelStore_doesNotCancelAPendingNoteEdit() =
     runTest(testDispatcher) {
       val store = ViewModelStore()
-      val factory = viewModelFactory {
-        initializer { PlaceDetailViewModel(repository, entryId, appScope) }
-      }
-      val viewModel = ViewModelProvider(store, factory).get(PlaceDetailViewModel::class)
+      val viewModel = viewModelInStore(store)
       backgroundScope.launch { viewModel.uiState.collect {} }
 
       viewModel.updateNote("Great pasta")
@@ -188,5 +196,56 @@ class PlaceDetailViewModelTest {
       advanceUntilIdle()
 
       assertEquals("Great pasta", db.placeEntryDao().byId(entryId)!!.note)
+    }
+
+  /**
+   * Regression: reopening the same entry within the 500ms debounce used to create a second
+   * ViewModel that read the still-unwritten (stale) note from Room, edit it, and have its own write
+   * land — only for the first ViewModel's delayed write to land afterwards and silently clobber it.
+   * Flushing the pending edit as soon as the store clears — well before the debounce would fire on
+   * its own — closes that window: a reopened screen never observes a stale note. `advanceTimeBy` +
+   * `runCurrent`, not `advanceUntilIdle`, so the debounce's own delay is deliberately never given
+   * the chance to fire; only the close-triggered flush can land this.
+   */
+  @Test
+  fun clearingTheViewModelStore_beforeTheDebounceElapses_flushesTheEditImmediately() =
+    runTest(testDispatcher) {
+      val store = ViewModelStore()
+      val viewModel = viewModelInStore(store)
+      backgroundScope.launch { viewModel.uiState.collect {} }
+
+      viewModel.updateNote("Great pasta")
+      advanceTimeBy(100)
+      store.clear()
+      runCurrent()
+
+      assertEquals("Great pasta", db.placeEntryDao().byId(entryId)!!.note)
+    }
+
+  /**
+   * Guards the other side of the same fix: a note whose debounce already fired and landed normally
+   * must not be rewritten (or have updatedAt re-stamped) just because the store happens to clear
+   * afterwards — the close hook only acts on a still-active job.
+   */
+  @Test
+  fun clearingTheViewModelStore_afterTheNoteHasAlreadyLanded_doesNotRewriteOrRestampIt() =
+    runTest(testDispatcher) {
+      var t = 0L
+      val incrementingRepository =
+        PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { ++t })
+      val store = ViewModelStore()
+      val viewModel = viewModelInStore(store, incrementingRepository)
+      backgroundScope.launch { viewModel.uiState.collect {} }
+
+      viewModel.updateNote("Great pasta")
+      advanceUntilIdle()
+      val landedUpdatedAt = db.placeEntryDao().byId(entryId)!!.updatedAt
+
+      store.clear()
+      advanceUntilIdle()
+
+      val afterClear = db.placeEntryDao().byId(entryId)!!
+      assertEquals("Great pasta", afterClear.note)
+      assertEquals(landedUpdatedAt, afterClear.updatedAt)
     }
 }

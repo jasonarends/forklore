@@ -42,12 +42,29 @@ class PlaceDetailViewModel(
    * The note the user is currently typing, overriding whatever Room reports. Without this, each
    * keystroke would be visible in the UI for a moment and then overwritten by the previous
    * (pre-edit) value replayed from the still-unwritten database row, which reads as the app eating
-   * keystrokes. This ViewModel is the note's only writer, so once set it is authoritative for the
-   * rest of its lifetime — it never needs to yield back to what Room reports.
+   * keystrokes. Once set it is authoritative for the rest of this instance's lifetime — it never
+   * needs to yield back to what Room reports.
    */
   private val pendingNote = MutableStateFlow<String?>(null)
 
   private var noteSaveJob: Job? = null
+
+  init {
+    // Closing runs synchronously as part of the real ViewModelStore clearing this instance,
+    // before a reopened screen's new ViewModel could start observing Room. Without this, a
+    // still-pending debounce from this instance can land *after* that new instance has already
+    // read (and the user has already edited past) the stale pre-edit note, silently losing
+    // whichever edit writes second. isActive guards against re-writing (and re-stamping
+    // updatedAt on) a note whose debounce already fired normally.
+    addCloseable {
+      val job = noteSaveJob
+      val note = pendingNote.value
+      if (job?.isActive == true && note != null) {
+        job.cancel()
+        appScope.launch { saveNote(note) }
+      }
+    }
+  }
 
   val uiState: StateFlow<PlaceDetailUiState> =
     combine(placeRepository.observeEntry(placeEntryId), pendingNote) { entry, pending ->
@@ -69,24 +86,21 @@ class PlaceDetailViewModel(
   fun updateRevisitIntent(intent: RevisitIntent?) = update { it.copy(revisitIntent = intent) }
 
   /**
-   * Debounced rather than written on every keystroke: a note is typed a character at a time and a
-   * Room write (plus the Flow re-query it triggers) per character would mean constant recomposition
-   * for no benefit, since nobody reads a note mid-keystroke. The debounce job runs on [appScope],
-   * not `viewModelScope`: `viewModelScope` is cancelled the moment the real `ViewModelStore` clears
-   * this ViewModel (`clear()` closes it *before* calling `onCleared()`), which would silently drop
-   * whatever edit was still waiting out its debounce. Running on [appScope] instead means leaving
-   * the screen cancels nothing — the pending edit still lands once the debounce elapses, and an
-   * already-landed note is never rewritten, since a new keystroke cancels [noteSaveJob] exactly as
-   * it would on `viewModelScope`.
+   * Debounced rather than written on every keystroke, since nobody reads a note mid-keystroke. Runs
+   * on [appScope] rather than `viewModelScope` and is flushed early if the ViewModel is closed
+   * first — see the `init` block.
    */
   fun updateNote(note: String) {
     pendingNote.value = note
     noteSaveJob?.cancel()
     noteSaveJob = appScope.launch {
       delay(NOTE_SAVE_DEBOUNCE_MILLIS)
-      placeRepository.updateEntry(placeEntryId) { it.copy(note = note) }
+      saveNote(note)
     }
   }
+
+  private suspend fun saveNote(note: String) =
+    placeRepository.updateEntry(placeEntryId) { it.copy(note = note) }
 
   private fun update(change: (PlaceEntryEntity) -> PlaceEntryEntity) {
     viewModelScope.launch { placeRepository.updateEntry(placeEntryId, change) }
