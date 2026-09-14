@@ -26,3 +26,6 @@ keystore.properties
 
 # Private note fixtures — real personal notes, never committed
 fixtures/notes-real.txt
+
+# Agent worktrees created during parallel issue work
+.claude/worktrees/
