@@ -23,7 +23,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # The action's default `packages` is "tools platform-tools", but Google's SDK
+      # repository no longer lists `tools`, so the default fails setup before anything
+      # builds. AGP fetches platforms and build-tools itself; only platform-tools is needed.
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v6
 
