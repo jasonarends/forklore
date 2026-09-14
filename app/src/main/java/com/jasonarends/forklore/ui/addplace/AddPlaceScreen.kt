@@ -37,6 +37,7 @@ fun AddPlaceScreen(
   viewModel: AddPlaceViewModel = viewModel(factory = AddPlaceViewModel.Factory),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val placeListReady by viewModel.placeListReady.collectAsStateWithLifecycle()
 
   LaunchedEffect(state.saved) {
     if (state.saved) onSaved()
@@ -44,6 +45,7 @@ fun AddPlaceScreen(
 
   AddPlaceForm(
     state = state,
+    placeListReady = placeListReady,
     onNameChange = viewModel::onNameChange,
     onBranchLabelChange = viewModel::onBranchLabelChange,
     onAddressChange = viewModel::onAddressChange,
@@ -59,6 +61,7 @@ fun AddPlaceScreen(
 @Composable
 internal fun AddPlaceForm(
   state: AddPlaceUiState,
+  placeListReady: Boolean,
   onNameChange: (String) -> Unit,
   onBranchLabelChange: (String) -> Unit,
   onAddressChange: (String) -> Unit,
@@ -100,7 +103,7 @@ internal fun AddPlaceForm(
       TextButton(onClick = onCancel) { Text("Cancel") }
       Button(
         onClick = onSave,
-        enabled = state.name.isNotBlank() && state.placeListReady && !state.saving,
+        enabled = state.name.isNotBlank() && placeListReady && !state.saving,
       ) {
         Text("Save")
       }
@@ -114,6 +117,7 @@ private fun AddPlaceFormPreview() {
   ForkloreTheme {
     AddPlaceForm(
       state = AddPlaceUiState(name = "Halberd", branchLabel = "Westport"),
+      placeListReady = true,
       onNameChange = {},
       onBranchLabelChange = {},
       onAddressChange = {},

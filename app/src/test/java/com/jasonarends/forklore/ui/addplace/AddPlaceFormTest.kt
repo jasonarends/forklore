@@ -22,6 +22,7 @@ class AddPlaceFormTest {
     composeTestRule.setContent {
       AddPlaceForm(
         state = AddPlaceUiState(),
+        placeListReady = true,
         onNameChange = {},
         onBranchLabelChange = {},
         onAddressChange = {},
@@ -41,6 +42,7 @@ class AddPlaceFormTest {
     composeTestRule.setContent {
       AddPlaceForm(
         state = AddPlaceUiState(name = typed),
+        placeListReady = true,
         onNameChange = { typed = it },
         onBranchLabelChange = {},
         onAddressChange = {},
@@ -61,7 +63,8 @@ class AddPlaceFormTest {
     var saved = false
     composeTestRule.setContent {
       AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd", placeListReady = true),
+        state = AddPlaceUiState(name = "Halberd"),
+        placeListReady = true,
         onNameChange = {},
         onBranchLabelChange = {},
         onAddressChange = {},
@@ -81,7 +84,8 @@ class AddPlaceFormTest {
   fun save_isDisabledWhileTheDefaultListIsStillLoading() {
     composeTestRule.setContent {
       AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd", placeListReady = false),
+        state = AddPlaceUiState(name = "Halberd"),
+        placeListReady = false,
         onNameChange = {},
         onBranchLabelChange = {},
         onAddressChange = {},
@@ -99,7 +103,8 @@ class AddPlaceFormTest {
   fun save_isDisabledWhileASaveIsAlreadyInFlight() {
     composeTestRule.setContent {
       AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd", placeListReady = true, saving = true),
+        state = AddPlaceUiState(name = "Halberd", saving = true),
+        placeListReady = true,
         onNameChange = {},
         onBranchLabelChange = {},
         onAddressChange = {},
@@ -119,6 +124,7 @@ class AddPlaceFormTest {
     composeTestRule.setContent {
       AddPlaceForm(
         state = AddPlaceUiState(),
+        placeListReady = true,
         onNameChange = {},
         onBranchLabelChange = {},
         onAddressChange = {},

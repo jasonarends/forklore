@@ -14,6 +14,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -31,8 +35,8 @@ class AddPlaceViewModelTest {
   // Standard, not Unconfined: Unconfined runs viewModelScope.launch eagerly, so `saved == false`
   // right after save() only proved true "by luck" — it happened to still be racing Room's real
   // background thread rather than being genuinely gated on the coroutine not having run yet.
-  // Standard requires an explicit advanceUntilIdle() (see waitUntilSaved) before anything queued
-  // on it runs at all.
+  // Standard requires an explicit advanceUntilIdle() (see waitUntil) before anything queued on it
+  // runs at all.
   private val testDispatcher = StandardTestDispatcher()
 
   @get:Rule val mainDispatcherRule = MainDispatcherRule(testDispatcher)
@@ -73,7 +77,7 @@ class AddPlaceViewModelTest {
 
     viewModel.save()
 
-    assertEquals(false, viewModel.uiState.value.saved)
+    assertFalse(viewModel.uiState.value.saved)
     assertEquals(0, entriesInList().size)
   }
 
@@ -83,21 +87,10 @@ class AddPlaceViewModelTest {
     viewModel.onNameChange("Halberd")
 
     viewModel.save()
-    // uiState is derived (combine(...).stateIn(..., SharingStarted.Eagerly, ...)), so its
-    // collector needs one turn of the dispatcher before it reflects save()'s synchronous
-    // `saving = true` at all.
-    testDispatcher.scheduler.advanceUntilIdle()
+    waitUntil(viewModel) { it.saved }
 
-    // That one turn is not enough to reach the repository call's own completion, though: the DAO
-    // insert genuinely hops to Room's background query executor, so the write has not landed yet
-    // — saved must still be false.
-    assertEquals(true, viewModel.uiState.value.saving)
-    assertEquals(false, viewModel.uiState.value.saved)
-
-    waitUntilSaved(viewModel)
-
-    assertEquals(false, viewModel.uiState.value.saving)
-    assertEquals(true, viewModel.uiState.value.saved)
+    assertFalse(viewModel.uiState.value.saving)
+    assertTrue(viewModel.uiState.value.saved)
     assertEquals(1, entriesInList().size)
   }
 
@@ -109,7 +102,7 @@ class AddPlaceViewModelTest {
     viewModel.save()
     viewModel.save() // a double tap, landed before the first save's coroutine has returned
 
-    waitUntilSaved(viewModel)
+    waitUntil(viewModel) { it.saved }
 
     assertEquals(1, entriesInList().size)
   }
@@ -123,11 +116,23 @@ class AddPlaceViewModelTest {
     viewModel.onNameChange("Halberd")
 
     viewModel.save()
-    waitUntilSettled(viewModel)
+    waitUntil(viewModel) { !it.saving }
 
-    assertEquals(false, viewModel.uiState.value.saving)
-    assertEquals(false, viewModel.uiState.value.saved)
-    assertEquals(true, viewModel.uiState.value.error != null)
+    assertFalse(viewModel.uiState.value.saving)
+    assertFalse(viewModel.uiState.value.saved)
+    assertNotNull(viewModel.uiState.value.error)
+  }
+
+  @Test
+  fun editingAField_clearsAPreviousError() {
+    val viewModel = AddPlaceViewModel(repository, MutableStateFlow("no-such-list"))
+    viewModel.onNameChange("Halberd")
+    viewModel.save()
+    waitUntil(viewModel) { it.error != null }
+
+    viewModel.onNameChange("Halberd 2")
+
+    assertNull(viewModel.uiState.value.error)
   }
 
   @Test
@@ -138,9 +143,9 @@ class AddPlaceViewModelTest {
 
     viewModel.save()
 
-    assertEquals(false, viewModel.uiState.value.saving)
-    assertEquals(false, viewModel.uiState.value.saved)
-    assertEquals(false, viewModel.uiState.value.placeListReady)
+    assertFalse(viewModel.uiState.value.saving)
+    assertFalse(viewModel.uiState.value.saved)
+    assertFalse(viewModel.placeListReady.value)
   }
 
   private fun entriesInList(): List<*> = runBlocking { repository.observeList(listId).first() }
@@ -151,31 +156,16 @@ class AddPlaceViewModelTest {
    * this still polls, advancing the scheduler each pass to pick up the continuation the moment that
    * real thread resumes it.
    */
-  private fun waitUntilSaved(viewModel: AddPlaceViewModel, timeoutMillis: Long = 5_000) {
-    waitUntilSettled(viewModel, timeoutMillis) { it.saved }
-  }
-
-  /** Settles on either outcome of a save: a success (`saved`) or a caught failure (`!saving`). */
-  private fun waitUntilSettled(viewModel: AddPlaceViewModel, timeoutMillis: Long = 5_000) {
-    waitUntilSettled(viewModel, timeoutMillis) { !it.saving }
-  }
-
-  /**
-   * Advances at least once before the first check: `uiState` is derived and its collector hasn't
-   * necessarily run its first turn yet, so checking the condition before advancing can read a stale
-   * seed value — e.g. `!saving` looks satisfied from `uiState`'s never-collected initial value,
-   * before the save this is meant to wait for has even started.
-   */
-  private fun waitUntilSettled(
+  private fun waitUntil(
     viewModel: AddPlaceViewModel,
-    timeoutMillis: Long,
+    timeoutMillis: Long = 5_000,
     condition: (AddPlaceUiState) -> Boolean,
   ) {
     val deadline = System.currentTimeMillis() + timeoutMillis
     while (true) {
       testDispatcher.scheduler.advanceUntilIdle()
       if (condition(viewModel.uiState.value)) return
-      check(System.currentTimeMillis() < deadline) { "Timed out waiting for save() to settle" }
+      check(System.currentTimeMillis() < deadline) { "Timed out waiting for the condition" }
       Thread.sleep(5)
     }
   }

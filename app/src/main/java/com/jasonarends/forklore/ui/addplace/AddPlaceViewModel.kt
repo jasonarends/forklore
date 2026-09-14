@@ -11,7 +11,8 @@ import com.jasonarends.forklore.data.repository.PlaceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,37 +26,37 @@ class AddPlaceViewModel(
   private val placeListId: StateFlow<String?>,
 ) : ViewModel() {
 
-  // The form fields this screen actually owns. placeListReady is deliberately not stored here: it
-  // is derived below from placeListId, so there's exactly one source of truth for it rather than a
-  // seeded initial value plus a collector that has to keep it in sync.
-  private val _formState = MutableStateFlow(AddPlaceUiState())
+  // Plain, not derived: combine()'s collector yields after each emission, and on Main.immediate
+  // that's a real gap (a posted Handler message) in which a recomposition can hand the
+  // String-based OutlinedTextFields a stale value — dropped keystrokes, cursor jumps, worse with
+  // IME autocorrect batching. Text-field state stays on a synchronous StateFlow for exactly that
+  // reason; placeListReady, which nothing types into, is fine as its own derived flow below.
+  private val _uiState = MutableStateFlow(AddPlaceUiState())
+  val uiState: StateFlow<AddPlaceUiState> = _uiState.asStateFlow()
 
-  val uiState: StateFlow<AddPlaceUiState> =
-    combine(_formState, placeListId) { form, listId -> form.copy(placeListReady = listId != null) }
-      .stateIn(
-        viewModelScope,
-        SharingStarted.Eagerly,
-        AddPlaceUiState(placeListReady = placeListId.value != null),
-      )
+  val placeListReady: StateFlow<Boolean> =
+    placeListId
+      .map { it != null }
+      .stateIn(viewModelScope, SharingStarted.Eagerly, placeListId.value != null)
 
   fun onNameChange(value: String) {
-    _formState.update { it.copy(name = value) }
+    _uiState.update { it.copy(name = value, error = null) }
   }
 
   fun onBranchLabelChange(value: String) {
-    _formState.update { it.copy(branchLabel = value) }
+    _uiState.update { it.copy(branchLabel = value, error = null) }
   }
 
   fun onAddressChange(value: String) {
-    _formState.update { it.copy(address = value) }
+    _uiState.update { it.copy(address = value, error = null) }
   }
 
   fun onNoteChange(value: String) {
-    _formState.update { it.copy(note = value) }
+    _uiState.update { it.copy(note = value, error = null) }
   }
 
   fun onWarningChange(value: String) {
-    _formState.update { it.copy(warning = value) }
+    _uiState.update { it.copy(warning = value, error = null) }
   }
 
   /**
@@ -65,12 +66,12 @@ class AddPlaceViewModel(
    * second call see it.
    */
   fun save() {
-    val state = _formState.value
+    val state = _uiState.value
     val name = state.name.trim()
     val listId = placeListId.value
     if (name.isEmpty() || listId == null || state.saving) return
 
-    _formState.update { it.copy(saving = true, error = null) }
+    _uiState.update { it.copy(saving = true, error = null) }
     viewModelScope.launch {
       try {
         placeRepository.addPlaceToList(
@@ -81,13 +82,11 @@ class AddPlaceViewModel(
           note = state.note,
           warning = state.warning.trim().ifBlank { null },
         )
-        _formState.update { it.copy(saving = false, saved = true) }
+        _uiState.update { it.copy(saving = false, saved = true) }
       } catch (_: SQLiteException) {
         // A write that fails (a full disk, a constraint violation) must not crash the app or
         // leave Save stuck disabled forever — the person just needs to be able to try again.
-        _formState.update {
-          it.copy(saving = false, error = "Couldn't save this place. Try again.")
-        }
+        _uiState.update { it.copy(saving = false, error = "Couldn't save this place. Try again.") }
       }
     }
   }
@@ -108,7 +107,6 @@ data class AddPlaceUiState(
   val address: String = "",
   val note: String = "",
   val warning: String = "",
-  val placeListReady: Boolean = false,
   val saving: Boolean = false,
   val saved: Boolean = false,
   val error: String? = null,
