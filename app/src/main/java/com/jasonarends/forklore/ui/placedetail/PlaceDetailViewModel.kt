@@ -50,12 +50,8 @@ class PlaceDetailViewModel(
   private var noteSaveJob: Job? = null
 
   init {
-    // Closing runs synchronously as part of the real ViewModelStore clearing this instance,
-    // before a reopened screen's new ViewModel could start observing Room. Without this, a
-    // still-pending debounce from this instance can land *after* that new instance has already
-    // read (and the user has already edited past) the stale pre-edit note, silently losing
-    // whichever edit writes second. isActive guards against re-writing (and re-stamping
-    // updatedAt on) a note whose debounce already fired normally.
+    // Flush on close rather than waiting out the debounce, so a reopened screen reads the edit
+    // instead of the stale note; isActive skips a note whose debounce already landed.
     addCloseable {
       val job = noteSaveJob
       val note = pendingNote.value
