@@ -8,6 +8,9 @@ import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.data.repository.PlaceListRepository
 import com.jasonarends.forklore.data.repository.PlaceRepository
 import com.jasonarends.forklore.data.repository.VisitRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,9 +30,16 @@ import kotlinx.coroutines.flow.asStateFlow
 class AppContainer(context: Context, private val clock: Clock = Clock.System) {
   private val database: ForkloreDatabase by lazy { ForkloreDatabase.build(context) }
 
+  /**
+   * Outlives any single ViewModel, unlike `viewModelScope`. A ViewModel with a debounced write (a
+   * note save, say) launches it here instead, so leaving the screen before the debounce fires
+   * doesn't cancel it along with `viewModelScope`.
+   */
+  val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
   val placeListRepository by lazy { PlaceListRepository(database.placeListDao(), clock) }
   val placeRepository by lazy {
-    PlaceRepository(database.placeDao(), database.placeEntryDao(), clock)
+    PlaceRepository(database, database.placeDao(), database.placeEntryDao(), clock)
   }
   val personRepository by lazy { PersonRepository(database.personDao(), clock) }
   val visitRepository by lazy { VisitRepository(database.visitDao(), clock) }

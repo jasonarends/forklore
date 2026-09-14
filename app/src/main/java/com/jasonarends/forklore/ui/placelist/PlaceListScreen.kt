@@ -1,0 +1,126 @@
+package com.jasonarends.forklore.ui.placelist
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
+import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.PlaceStatusChip
+import com.jasonarends.forklore.ui.components.RatingLabel
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaceListScreen(
+  onAddPlace: () -> Unit,
+  onPlaceClick: (String) -> Unit,
+  onPeopleClick: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: PlaceListViewModel = viewModel(factory = PlaceListViewModel.Factory),
+) {
+  val state by viewModel.uiState.collectAsStateWithLifecycle()
+  Scaffold(
+    modifier = modifier,
+    topBar = {
+      TopAppBar(
+        title = { Text("Forklore") },
+        actions = { TextButton(onClick = onPeopleClick) { Text("People") } },
+      )
+    },
+  ) { innerPadding ->
+    when (val current = state) {
+      PlaceListUiState.Loading ->
+        PlaceList(
+          entries = emptyList(),
+          onAddPlace = onAddPlace,
+          onPlaceClick = onPlaceClick,
+          modifier = Modifier.padding(innerPadding),
+        )
+      is PlaceListUiState.Success ->
+        PlaceList(
+          entries = current.entries,
+          onAddPlace = onAddPlace,
+          onPlaceClick = onPlaceClick,
+          modifier = Modifier.padding(innerPadding),
+        )
+      is PlaceListUiState.Error ->
+        Text(
+          "Couldn't load your list: ${current.throwable.message}",
+          modifier = Modifier.padding(innerPadding),
+        )
+    }
+  }
+}
+
+/** Stateless by design: state in, events out. Only the screen-level composable sees a ViewModel. */
+@Composable
+internal fun PlaceList(
+  entries: List<PlaceEntryWithPlace>,
+  onAddPlace: () -> Unit,
+  onPlaceClick: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  // LazyColumn, not Column+forEach: once people can add places the list has to scroll rather
+  // than overflow. The add button rides along as a header item rather than living outside the
+  // scrollable area.
+  LazyColumn(modifier) {
+    item {
+      Button(onClick = onAddPlace, modifier = Modifier.fillMaxWidth()) { Text("Add a place") }
+    }
+    if (entries.isEmpty()) {
+      item { EmptyState("Nothing here yet — add the first place you don't want to forget.") }
+    } else {
+      items(entries, key = { it.entry.id }) { entry ->
+        Row(
+          modifier =
+            Modifier.fillMaxWidth()
+              .clickable { onPlaceClick(entry.entry.id) }
+              .padding(vertical = 4.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = listOfNotNull(entry.place.name, entry.place.branchLabel).joinToString(" · "),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+          )
+          // Food and service are rated apart; a bare rating word would read as an overall verdict.
+          entry.entry.foodRating?.let {
+            Text(
+              "Food:",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            RatingLabel(it)
+          }
+          PlaceStatusChip(entry.entry.status)
+        }
+      }
+    }
+  }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PlaceListEmptyPreview() {
+  ForkloreTheme { PlaceList(entries = emptyList(), onAddPlace = {}, onPlaceClick = {}) }
+}
