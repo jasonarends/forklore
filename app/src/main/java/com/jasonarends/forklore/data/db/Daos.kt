@@ -34,8 +34,15 @@ interface PersonDao {
 
   @Query("SELECT * FROM people WHERE id = :id") suspend fun byId(id: String): PersonEntity?
 
-  @Query("SELECT * FROM people WHERE normalizedName = :normalizedName AND deletedAt IS NULL")
-  suspend fun byNormalizedName(normalizedName: String): PersonEntity?
+  /**
+   * Matches regardless of [PersonEntity.deletedAt]: the unique index on
+   * [PersonEntity.normalizedName] covers tombstoned rows too, so a caller deciding whether a name
+   * is free has to see them or it will try to insert a second row and crash on the index. Live
+   * callers that only care about people currently in use should filter [PersonEntity.deletedAt]
+   * themselves, the way every other read in this codebase does.
+   */
+  @Query("SELECT * FROM people WHERE normalizedName = :normalizedName")
+  suspend fun byNormalizedNameIncludingDeleted(normalizedName: String): PersonEntity?
 }
 
 @Dao

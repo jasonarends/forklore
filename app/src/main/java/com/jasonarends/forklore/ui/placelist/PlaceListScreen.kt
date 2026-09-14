@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -24,31 +28,46 @@ import com.jasonarends.forklore.ui.components.PlaceStatusChip
 import com.jasonarends.forklore.ui.components.RatingLabel
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceListScreen(
   onAddPlace: () -> Unit,
   onPlaceClick: (String) -> Unit,
+  onPeopleClick: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceListViewModel = viewModel(factory = PlaceListViewModel.Factory),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
-  when (val current = state) {
-    PlaceListUiState.Loading ->
-      PlaceList(
-        entries = emptyList(),
-        onAddPlace = onAddPlace,
-        onPlaceClick = onPlaceClick,
-        modifier = modifier,
+  Scaffold(
+    modifier = modifier,
+    topBar = {
+      TopAppBar(
+        title = { Text("Forklore") },
+        actions = { TextButton(onClick = onPeopleClick) { Text("People") } },
       )
-    is PlaceListUiState.Success ->
-      PlaceList(
-        entries = current.entries,
-        onAddPlace = onAddPlace,
-        onPlaceClick = onPlaceClick,
-        modifier = modifier,
-      )
-    is PlaceListUiState.Error ->
-      Text("Couldn't load your list: ${current.throwable.message}", modifier)
+    },
+  ) { innerPadding ->
+    when (val current = state) {
+      PlaceListUiState.Loading ->
+        PlaceList(
+          entries = emptyList(),
+          onAddPlace = onAddPlace,
+          onPlaceClick = onPlaceClick,
+          modifier = Modifier.padding(innerPadding),
+        )
+      is PlaceListUiState.Success ->
+        PlaceList(
+          entries = current.entries,
+          onAddPlace = onAddPlace,
+          onPlaceClick = onPlaceClick,
+          modifier = Modifier.padding(innerPadding),
+        )
+      is PlaceListUiState.Error ->
+        Text(
+          "Couldn't load your list: ${current.throwable.message}",
+          modifier = Modifier.padding(innerPadding),
+        )
+    }
   }
 }
 

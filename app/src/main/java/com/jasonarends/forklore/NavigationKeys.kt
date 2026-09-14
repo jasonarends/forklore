@@ -12,3 +12,5 @@ import kotlinx.serialization.Serializable
  * in; the navigation key carrying [placeEntryId] is the contract between the two.
  */
 @Serializable data class PlaceDetail(val placeEntryId: String) : NavKey
+
+@Serializable data object People : NavKey

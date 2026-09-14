@@ -11,6 +11,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.jasonarends.forklore.ui.addplace.AddPlaceScreen
+import com.jasonarends.forklore.ui.people.PeopleScreen
 import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
 import com.jasonarends.forklore.ui.placelist.PlaceListScreen
 
@@ -36,6 +37,7 @@ fun MainNavigation() {
           PlaceListScreen(
             onAddPlace = { backStack.add(AddPlace) },
             onPlaceClick = { entryId -> backStack.add(PlaceDetail(entryId)) },
+            onPeopleClick = { backStack.add(People) },
             modifier = Modifier.safeDrawingPadding().padding(16.dp),
           )
         }
@@ -52,6 +54,7 @@ fun MainNavigation() {
             modifier = Modifier.safeDrawingPadding().padding(16.dp),
           )
         }
+        entry<People> { PeopleScreen(modifier = Modifier.safeDrawingPadding().padding(16.dp)) }
       },
   )
 }
