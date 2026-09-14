@@ -48,6 +48,23 @@ class MainNavigationTest {
     waitForListEntry("Fifth Avenue Social")
   }
 
+  @Test
+  fun peopleAction_opensThePeopleScreen() {
+    composeTestRule.setContent { MainNavigation() }
+
+    composeTestRule.onNodeWithText("People").performClick()
+
+    // "People" itself can't be the assertion: the top-bar action and PeopleScreen's section header
+    // both show it. The empty state is only on PeopleScreen, and a fresh app has no people yet.
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule
+        .onAllNodesWithText("No one yet. Add someone above.")
+        .fetchSemanticsNodes()
+        .isNotEmpty()
+    }
+    composeTestRule.onNodeWithText("Add a place").assertDoesNotExist()
+  }
+
   private fun addAPlace(name: String) {
     composeTestRule.onNodeWithText("Add a place").performClick()
     finishAddingAPlace(name)
