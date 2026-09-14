@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,8 +87,9 @@ internal fun PeopleContent(
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     item { SectionHeader("People") }
+    item { AddPersonRow(onAddPerson = onAddPerson) }
     if (people.isEmpty()) {
-      item { EmptyState("No one yet. Add a person below.") }
+      item { EmptyState("No one yet. Add someone above.") }
     }
     items(people, key = { it.id }) { person ->
       PersonRow(
@@ -101,7 +103,6 @@ internal fun PeopleContent(
         onCancelRename = onCancelRename,
       )
     }
-    item { AddPersonRow(onAddPerson = onAddPerson) }
   }
 }
 
@@ -119,8 +120,9 @@ private fun PersonRow(
   // Re-seeded from `person.name` every time editing starts, rather than hoisted: the ViewModel
   // owns *whether* this row is editing (see PeopleViewModel.RenameEdit), but the in-progress text
   // is exactly the transient, not-yet-committed kind of state CLAUDE.md carves out for a composable
-  // to hold locally.
-  var text by remember(person.id, isEditing) { mutableStateOf(person.name) }
+  // to hold locally. `rememberSaveable` rather than `remember` so a rotation mid-edit doesn't throw
+  // away what was typed.
+  var text by rememberSaveable(person.id, isEditing) { mutableStateOf(person.name) }
 
   Column(modifier = modifier.fillMaxWidth()) {
     Row(

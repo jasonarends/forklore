@@ -83,6 +83,21 @@ class PersonRepositoryTest {
   }
 
   @Test
+  fun findOrCreate_resurrectingRefreshesNameAndHouseholdMember() = runTest {
+    val id = repository.findOrCreate("Val", isHouseholdMember = false)
+    db.personDao().update(db.personDao().byId(id)!!.copy(deletedAt = 5_000L))
+
+    // The tombstone's old name and household status are exactly what someone found stale enough
+    // to type over — resurrecting should adopt this call's values, not the buried ones.
+    val resurrectedId = repository.findOrCreate("val ", isHouseholdMember = true)
+
+    assertEquals(id, resurrectedId)
+    val stored = db.personDao().byId(id)!!
+    assertEquals("val", stored.name)
+    assertTrue(stored.isHouseholdMember)
+  }
+
+  @Test
   fun rename_updatesTheNameAndStampsUpdatedAt() = runTest {
     val id = repository.findOrCreate("Val")
     now = 2_000L
@@ -93,6 +108,16 @@ class PersonRepositoryTest {
     val stored = db.personDao().byId(id)!!
     assertEquals("Valerie", stored.name)
     assertEquals(2_000L, stored.updatedAt)
+  }
+
+  @Test
+  fun rename_trimsTrailingWhitespaceBeforeStoring() = runTest {
+    val id = repository.findOrCreate("Val")
+
+    val result = repository.rename(id, "Dale   ")
+
+    assertEquals(PersonRepository.RenameResult.Success, result)
+    assertEquals("Dale", db.personDao().byId(id)!!.name)
   }
 
   @Test

@@ -48,16 +48,22 @@ class PeopleViewModel(private val personRepository: PersonRepository) : ViewMode
    * Stays in [RenameEdit] until the rename actually resolves: closing on [Unit] return (the old
    * fire-and-forget shape) meant the row closed the instant Save was tapped, before there was any
    * way to know whether it had succeeded.
+   *
+   * Every update is guarded by `it?.personId == id`: this call is in flight for as long as
+   * [personRepository]'s suspending write takes, and by the time it resolves the user may have
+   * cancelled this edit, or moved on to editing someone else entirely. Without the guard, a stale
+   * result either closes whatever row is now open or, worse, stamps this row's error onto it.
    */
   fun rename(id: String, name: String) {
     if (name.isBlank()) return
     viewModelScope.launch {
       when (personRepository.rename(id, name)) {
         PersonRepository.RenameResult.Success,
-        PersonRepository.RenameResult.NotFound -> _editing.value = null
+        PersonRepository.RenameResult.NotFound ->
+          _editing.update { if (it?.personId == id) null else it }
         PersonRepository.RenameResult.NameTaken -> {
           val message = "Someone is already named \"${name.trim()}\"."
-          _editing.update { current -> (current ?: RenameEdit(id)).copy(error = message) }
+          _editing.update { if (it?.personId == id) it.copy(error = message) else it }
         }
       }
     }

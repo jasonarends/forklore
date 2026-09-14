@@ -27,11 +27,9 @@ class PersonRepository(private val personDao: PersonDao, private val clock: Cloc
     val normalized = normalizeDishName(name)
     val now = clock.nowMillis()
 
-    // Local, not a class member, so it can close over this call's `name`/`isHouseholdMember`
-    // rather than needing them threaded through as extra parameters at both call sites below.
     // Resurrecting also refreshes `name` and `isHouseholdMember` to what was just typed: the
     // tombstoned row's old values are exactly what a caller found stale enough to type over.
-    suspend fun resolveExisting(normalized: String, now: Long): String? {
+    suspend fun resolveExisting(): String? {
       val existing = personDao.byNormalizedNameIncludingDeleted(normalized) ?: return null
       if (existing.deletedAt != null) {
         personDao.update(
@@ -46,7 +44,7 @@ class PersonRepository(private val personDao: PersonDao, private val clock: Cloc
       return existing.id
     }
 
-    resolveExisting(normalized, now)?.let {
+    resolveExisting()?.let {
       return it
     }
 
@@ -65,7 +63,7 @@ class PersonRepository(private val personDao: PersonDao, private val clock: Cloc
       // Lost a race with a concurrent findOrCreate/rename for the same name; the winner might
       // itself be a tombstone if it was mid-resurrection, so this goes through the same resolver
       // rather than a bare lookup that could hand back a still-deleted id.
-      resolveExisting(normalized, now) ?: throw e
+      resolveExisting() ?: throw e
     }
   }
 

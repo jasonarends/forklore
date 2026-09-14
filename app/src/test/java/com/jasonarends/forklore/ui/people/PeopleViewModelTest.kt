@@ -3,9 +3,12 @@ package com.jasonarends.forklore.ui.people
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.jasonarends.forklore.data.db.ForkloreDatabase
+import com.jasonarends.forklore.data.db.PersonDao
+import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -159,17 +162,96 @@ class PeopleViewModelTest {
   }
 
   @Test
-  fun rename_withOnlyTrailingWhitespaceAdded_stillClosesTheRow() = runTest {
-    viewModel.addPerson("Dale")
-    val dale = db.personDao().observeAll().first { it.isNotEmpty() }.single()
-    viewModel.startRename(dale.id)
-    viewModel.uiState.first { it is PeopleUiState.Success && it.editing?.personId == dale.id }
+  fun rename_landingLateAsSuccess_doesNotCloseADifferentRowOpenedMeanwhile() = runTest {
+    val (ana, _, bo) = threePeople()
+    val gate = CompletableDeferred<Unit>()
+    val gated = gatedViewModel(gate)
 
-    viewModel.rename(dale.id, "Dale   ")
+    gated.startRename(ana.id)
+    gated.rename(ana.id, "Ana Marsh") // suspends inside the collision check, waiting on the gate
+    gated.startRename(bo.id)
+    gate.complete(Unit) // lets Ana's rename resolve
 
     val success =
-      viewModel.uiState.first { it is PeopleUiState.Success && it.editing == null }
+      gated.uiState.first { it is PeopleUiState.Success && it.editing?.personId == bo.id }
         as PeopleUiState.Success
+    assertNull(success.editing!!.error)
+    assertEquals("Ana Marsh", db.personDao().byId(ana.id)!!.name)
+  }
+
+  @Test
+  fun rename_landingLateAsNameTaken_doesNotStampADifferentOpenRowsError() = runTest {
+    val (ana, marvin, bo) = threePeople()
+    val gate = CompletableDeferred<Unit>()
+    val gated = gatedViewModel(gate)
+
+    gated.startRename(ana.id)
+    gated.rename(ana.id, marvin.name) // will resolve to NameTaken once the gate opens
+    gated.startRename(bo.id)
+    gate.complete(Unit)
+
+    // Bo's row must still be open with no error: Ana's collision is not Bo's to show.
+    val success =
+      gated.uiState.first { it is PeopleUiState.Success && it.editing?.personId == bo.id }
+        as PeopleUiState.Success
+    assertNull(success.editing!!.error)
+  }
+
+  @Test
+  fun rename_landingLateAfterBeingCancelled_doesNotReopenTheRow() = runTest {
+    val (ana, _, _) = threePeople()
+    val gate = CompletableDeferred<Unit>()
+    val gated = gatedViewModel(gate)
+
+    gated.startRename(ana.id)
+    gated.rename(ana.id, "Ana Marsh")
+    gated.cancelRename()
+    gate.complete(Unit)
+
+    // Nothing should ever reopen Ana's row: the old `?: RenameEdit(id)` fallback would have.
+    val success =
+      gated.uiState.first {
+        it is PeopleUiState.Success &&
+          it.people.any { p -> p.id == ana.id && p.name == "Ana Marsh" }
+      } as PeopleUiState.Success
     assertNull(success.editing)
+  }
+
+  private data class ThreePeople(
+    val ana: PersonEntity,
+    val marvin: PersonEntity,
+    val bo: PersonEntity,
+  )
+
+  private suspend fun threePeople(): ThreePeople {
+    viewModel.addPerson("Ana")
+    viewModel.addPerson("Marvin")
+    viewModel.addPerson("Bo")
+    val people = db.personDao().observeAll().first { it.size >= 3 }
+    return ThreePeople(
+      ana = people.single { it.name == "Ana" },
+      marvin = people.single { it.name == "Marvin" },
+      bo = people.single { it.name == "Bo" },
+    )
+  }
+
+  /**
+   * A [PeopleViewModel] whose repository delays exactly at
+   * [PersonDao.byNormalizedNameIncludingDeleted] — the first suspension point inside
+   * `PersonRepository.rename`, reached regardless of whether it ends in success or a collision —
+   * until [gate] completes. This is what lets a test start a second rename on a different person
+   * while the first is still in flight, deterministically rather than by timing.
+   */
+  private fun gatedViewModel(gate: CompletableDeferred<Unit>): PeopleViewModel {
+    val dao =
+      object : PersonDao by db.personDao() {
+        override suspend fun byNormalizedNameIncludingDeleted(
+          normalizedName: String
+        ): PersonEntity? {
+          gate.await()
+          return db.personDao().byNormalizedNameIncludingDeleted(normalizedName)
+        }
+      }
+    return PeopleViewModel(PersonRepository(dao, Clock { now }))
   }
 }

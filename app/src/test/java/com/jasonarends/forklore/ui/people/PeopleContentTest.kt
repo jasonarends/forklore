@@ -195,7 +195,7 @@ class PeopleContentTest {
       )
     }
 
-    compose.onNodeWithText("No one yet. Add a person below.").assertExists()
+    compose.onNodeWithText("No one yet. Add someone above.").assertExists()
   }
 
   private fun person(name: String, household: Boolean): PersonEntity =
