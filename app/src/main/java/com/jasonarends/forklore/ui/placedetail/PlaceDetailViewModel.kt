@@ -31,7 +31,10 @@ import kotlinx.coroutines.launch
 class PlaceDetailViewModel(
   private val placeRepository: PlaceRepository,
   private val placeEntryId: String,
-  /** Outlives this ViewModel; see [onCleared]. */
+  /**
+   * Outlives this ViewModel, unlike `viewModelScope`. [updateNote]'s debounce runs here so that
+   * leaving the screen before it fires doesn't cancel it — see [updateNote].
+   */
   private val appScope: CoroutineScope,
 ) : ViewModel() {
 
@@ -68,30 +71,20 @@ class PlaceDetailViewModel(
   /**
    * Debounced rather than written on every keystroke: a note is typed a character at a time and a
    * Room write (plus the Flow re-query it triggers) per character would mean constant recomposition
-   * for no benefit, since nobody reads a note mid-keystroke. [onCleared] flushes whatever is still
-   * pending if the screen is left before the debounce fires, so the only way to lose an edit is the
-   * process dying mid-debounce.
+   * for no benefit, since nobody reads a note mid-keystroke. The debounce job runs on [appScope],
+   * not `viewModelScope`: `viewModelScope` is cancelled the moment the real `ViewModelStore` clears
+   * this ViewModel (`clear()` closes it *before* calling `onCleared()`), which would silently drop
+   * whatever edit was still waiting out its debounce. Running on [appScope] instead means leaving
+   * the screen cancels nothing — the pending edit still lands once the debounce elapses, and an
+   * already-landed note is never rewritten, since a new keystroke cancels [noteSaveJob] exactly as
+   * it would on `viewModelScope`.
    */
   fun updateNote(note: String) {
     pendingNote.value = note
     noteSaveJob?.cancel()
-    noteSaveJob = viewModelScope.launch {
+    noteSaveJob = appScope.launch {
       delay(NOTE_SAVE_DEBOUNCE_MILLIS)
       placeRepository.updateEntry(placeEntryId) { it.copy(note = note) }
-    }
-  }
-
-  /**
-   * `viewModelScope` is cancelled immediately after this returns, which would silently cancel
-   * [noteSaveJob] mid-debounce and drop the last edit. [appScope] outlives the ViewModel, so the
-   * flush still lands. Widened from `protected` to `public` (Kotlin allows relaxing an override's
-   * visibility) so a test can call it directly without a real `ViewModelStore` to clear.
-   */
-  public override fun onCleared() {
-    noteSaveJob?.cancel()
-    val note = pendingNote.value
-    if (note != null) {
-      appScope.launch { placeRepository.updateEntry(placeEntryId) { it.copy(note = note) } }
     }
   }
 

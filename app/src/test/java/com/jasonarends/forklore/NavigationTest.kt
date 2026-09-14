@@ -1,5 +1,7 @@
 package com.jasonarends.forklore
 
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.navigation3.runtime.NavBackStack
@@ -21,6 +23,7 @@ import org.robolectric.RobolectricTestRunner
 class NavigationTest {
   @get:Rule val compose = createComposeRule()
 
+  @OptIn(ExperimentalTestApi::class)
   @Test
   fun navigatingFromOnePlaceEntryToAnother_showsTheSecondEntrysOwnData() = runTest {
     val app = ApplicationProvider.getApplicationContext<ForkloreApp>()
@@ -35,7 +38,7 @@ class NavigationTest {
     compose.setContent { MainNavigation(backStack = backStack) }
 
     compose.runOnIdle { backStack.add(PlaceDetail(entryA)) }
-    compose.onNodeWithText("Note about Halberd").assertExists()
+    compose.waitUntilExactlyOneExists(hasText("Note about Halberd"))
 
     // Back to the list, then into a different place entry.
     compose.runOnIdle {
@@ -43,8 +46,17 @@ class NavigationTest {
       backStack.add(PlaceDetail(entryB))
     }
 
-    // The regression: without per-entry ViewModel scoping, entry A's cached ViewModel is reused
-    // and this still shows "Note about Halberd".
+    // Real Room background threads mean Compose idling alone doesn't guarantee the second
+    // screen's query has landed, so wait for whichever note actually shows rather than asserting
+    // immediately after runOnIdle. Either note appearing resolves this quickly — the regression is
+    // which one it is, not how long it takes to show up.
+    compose.waitUntilExactlyOneExists(
+      hasText("Note about Mirabel") or hasText("Note about Halberd")
+    )
+
+    // Checked in this order deliberately: under the bug, this first assertion is the one that
+    // fails — and it fails by finding "Note about Halberd" still there, not by timing out.
+    compose.onNodeWithText("Note about Halberd").assertDoesNotExist()
     compose.onNodeWithText("Note about Mirabel").assertExists()
   }
 }

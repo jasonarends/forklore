@@ -1,6 +1,9 @@
 package com.jasonarends.forklore.ui.placedetail
 
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.jasonarends.forklore.data.db.ForkloreDatabase
@@ -13,7 +16,6 @@ import com.jasonarends.forklore.data.repository.PlaceRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -51,10 +53,15 @@ class PlaceDetailViewModelTest {
             ForkloreDatabase::class.java,
           )
           .allowMainThreadQueries()
-          // Room's default transaction executor is a real background thread, invisible to
-          // advanceUntilIdle(): a fire-and-forget viewModelScope.launch whose write hops onto one
-          // would resume on real wall-clock time, after the test's assertions have already run. A
-          // same-thread executor keeps the write inside the coroutine the test controls.
+          // Room only reuses this transaction executor for suspend DAO calls made *while already
+          // inside* a database.withTransaction block (verified against the KSP-generated
+          // PlaceEntryDao_Impl and androidx.room.util.DBUtil.performSuspending/getCoroutineContext
+          // in the installed room-runtime-2.8.5 jar: absent an ambient TransactionElement, a call
+          // falls back to RoomDatabase.getQueryContext(), which wraps the query executor, not this
+          // one). PlaceRepository.updateEntry's read-modify-write runs inside withTransaction, so
+          // its writes land on this same-thread executor, keeping them visible to
+          // advanceUntilIdle(); observeById's Flow re-queries are independent of that transaction
+          // and still run on the query executor, left at Room's real default below.
           .setTransactionExecutor(Executor { it.run() })
           .build()
       repository = PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { 0L })
@@ -101,7 +108,13 @@ class PlaceDetailViewModelTest {
   @Test
   fun typingSeveralCharacters_writesTheNoteOnce_afterSettling() =
     runTest(testDispatcher) {
-      val viewModel = viewModel()
+      // An incrementing clock turns "how many writes happened" into a single, checkable number:
+      // if a write landed per keystroke rather than once after the debounce, updatedAt would have
+      // ticked past 1.
+      var t = 0L
+      val incrementingRepository =
+        PlaceRepository(db, db.placeDao(), db.placeEntryDao(), Clock { ++t })
+      val viewModel = PlaceDetailViewModel(incrementingRepository, entryId, appScope)
       backgroundScope.launch { viewModel.uiState.collect {} }
 
       // Nobody reads a note mid-keystroke, so a write per character would be pure overhead.
@@ -110,7 +123,9 @@ class PlaceDetailViewModelTest {
       viewModel.updateNote("Great pasta")
       advanceUntilIdle()
 
-      assertEquals("Great pasta", db.placeEntryDao().byId(entryId)!!.note)
+      val updated = db.placeEntryDao().byId(entryId)!!
+      assertEquals("Great pasta", updated.note)
+      assertEquals(1L, updated.updatedAt)
     }
 
   @Test
@@ -151,19 +166,25 @@ class PlaceDetailViewModelTest {
       assertEquals("Great pasta", state.entry.entry.note)
     }
 
+  /**
+   * Goes through the real lifecycle rather than calling a method directly: a [ViewModelProvider]
+   * backed by a real [ViewModelStore], then [ViewModelStore.clear], which is what an Activity or
+   * NavEntry actually does when a screen goes away. [PlaceDetailViewModel.updateNote]'s debounce
+   * runs on [appScope], not `viewModelScope`, so clearing the store — which cancels
+   * `viewModelScope` — must not cancel it.
+   */
   @Test
-  fun clearingTheViewModel_flushesAPendingNoteEdit() =
+  fun clearingTheViewModelStore_doesNotCancelAPendingNoteEdit() =
     runTest(testDispatcher) {
-      // The real lifecycle cancels viewModelScope immediately after onCleared() returns, which
-      // would cancel the debounce mid-flight; onCleared must flush the last edit through appScope
-      // instead. Reproduced here rather than just called: onCleared() alone proves nothing unless
-      // viewModelScope is also cancelled right after, same as the real ViewModelStore does.
-      val viewModel = viewModel()
+      val store = ViewModelStore()
+      val factory = viewModelFactory {
+        initializer { PlaceDetailViewModel(repository, entryId, appScope) }
+      }
+      val viewModel = ViewModelProvider(store, factory).get(PlaceDetailViewModel::class)
       backgroundScope.launch { viewModel.uiState.collect {} }
 
       viewModel.updateNote("Great pasta")
-      viewModel.onCleared()
-      viewModel.viewModelScope.cancel()
+      store.clear()
       advanceUntilIdle()
 
       assertEquals("Great pasta", db.placeEntryDao().byId(entryId)!!.note)

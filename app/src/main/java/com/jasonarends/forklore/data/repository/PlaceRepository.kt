@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.Flow
  * rather than hard-deleting, and escaping user input before it reaches LIKE.
  */
 class PlaceRepository(
-  /** Held only so [updateEntry] can wrap its read-modify-write in a transaction. */
   private val database: ForkloreDatabase,
   private val placeDao: PlaceDao,
   private val placeEntryDao: PlaceEntryDao,
@@ -85,8 +84,10 @@ class PlaceRepository(
    * independently revivable gets its own tombstone at that point.
    */
   suspend fun removeEntry(entryId: String) {
-    val now = clock.nowMillis()
-    val current = placeEntryDao.byId(entryId) ?: return
-    placeEntryDao.update(current.copy(deletedAt = now, updatedAt = now))
+    database.withTransaction {
+      val now = clock.nowMillis()
+      val current = placeEntryDao.byId(entryId) ?: return@withTransaction
+      placeEntryDao.update(current.copy(deletedAt = now, updatedAt = now))
+    }
   }
 }

@@ -31,11 +31,11 @@ class AppContainer(context: Context, private val clock: Clock = Clock.System) {
   private val database: ForkloreDatabase by lazy { ForkloreDatabase.build(context) }
 
   /**
-   * Outlives any single ViewModel, unlike `viewModelScope`. A ViewModel whose `onCleared` must
-   * finish a write (a debounced note save, say) launches it here instead, since `viewModelScope` is
-   * cancelled immediately after `onCleared` returns and would otherwise drop it.
+   * Outlives any single ViewModel, unlike `viewModelScope`. A ViewModel with a debounced write (a
+   * note save, say) launches it here instead, so leaving the screen before the debounce fires
+   * doesn't cancel it along with `viewModelScope`.
    */
-  val appScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+  val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   val placeListRepository by lazy { PlaceListRepository(database.placeListDao(), clock) }
   val placeRepository by lazy {
