@@ -9,7 +9,10 @@ import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -23,13 +26,21 @@ import org.robolectric.RobolectricTestRunner
 /**
  * Runs against a real in-memory Room database — see `PersonRepositoryTest`'s KDoc for why a fake
  * DAO isn't enough — via the same [MainDispatcherRule] every ViewModel test needs so
- * `viewModelScope` works at all. Room's own `Flow` emissions happen on Room's query executor, a
- * real thread outside any test dispatcher's control, so assertions read `uiState` with a suspending
- * `first { ... }` rather than a synchronous `.value`, which would just observe whatever was there
- * before Room caught up — and for the same reason, tests that need two writes to have landed in a
- * specific order await the first via `uiState.first { ... }` before issuing the second, rather than
- * firing both and hoping. `PersonRepositoryTest` covers the actual insert-collision race
- * deterministically; a timing-dependent version of it here would be flaky by construction.
+ * `viewModelScope` works at all.
+ *
+ * [db] is built with a synchronous query/transaction executor (`Executor { it.run() }`), not Room's
+ * default background thread pool. Most tests here still read `uiState` with a suspending `first {
+ * ... }`, which is simply a safe, ordering-independent way to wait for a `StateFlow` to reach a
+ * condition and works the same whether the write behind it is synchronous or not. The
+ * `rename_landingLate*` tests are different: they need to inspect state at one exact moment —
+ * immediately after a deliberately delayed write is released — and a `first { ... }` re-subscribe
+ * at that moment can't tell "the write already landed" apart from "the write hasn't happened yet
+ * but the predicate matched anyway", which is a real race if the write runs on a different thread.
+ * The synchronous executor removes that thread entirely: combined with [MainDispatcherRule]'s
+ * `UnconfinedTestDispatcher`, releasing the gate in those tests drives the delayed write to
+ * completion inline, on the calling thread, before the next line of the test runs — so those tests
+ * keep one live collector on `uiState` and assert on `.value` directly, no `first { ... }`
+ * involved.
  */
 @RunWith(RobolectricTestRunner::class)
 class PeopleViewModelTest {
@@ -48,6 +59,8 @@ class PeopleViewModelTest {
           ForkloreDatabase::class.java,
         )
         .allowMainThreadQueries()
+        .setQueryExecutor { it.run() }
+        .setTransactionExecutor { it.run() }
         .build()
     repository = PersonRepository(db.personDao(), Clock { now })
     // Built here, not in a field initializer: stateIn launches its sharing coroutine on
@@ -161,61 +174,98 @@ class PeopleViewModelTest {
     assertNull(success.editing)
   }
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   @Test
-  fun rename_landingLateAsSuccess_doesNotCloseADifferentRowOpenedMeanwhile() = runTest {
-    val (ana, _, bo) = threePeople()
-    val gate = CompletableDeferred<Unit>()
-    val gated = gatedViewModel(gate)
+  fun rename_landingLateAsSuccess_doesNotCloseADifferentRowOpenedMeanwhile() =
+    runTest(UnconfinedTestDispatcher()) {
+      val (ana, _, bo) = threePeople()
+      val gate = CompletableDeferred<Unit>()
+      val gated = gatedViewModel(gate)
+      val collector = launch { gated.uiState.collect {} }
 
-    gated.startRename(ana.id)
-    gated.rename(ana.id, "Ana Marsh") // suspends inside the collision check, waiting on the gate
-    gated.startRename(bo.id)
-    gate.complete(Unit) // lets Ana's rename resolve
+      gated.startRename(ana.id)
+      gated.rename(ana.id, "Ana Marsh") // suspends before the collision check, waiting on the gate
+      gated.startRename(bo.id)
+      // Resolves the gate synchronously, on this thread: the query executor set in `setUp` runs
+      // inline rather than hopping to a background pool, so Ana's rename — collision check, write,
+      // and the guarded `_editing` update — all complete before `complete` returns.
+      gate.complete(Unit)
 
-    val success =
-      gated.uiState.first { it is PeopleUiState.Success && it.editing?.personId == bo.id }
-        as PeopleUiState.Success
-    assertNull(success.editing!!.error)
-    assertEquals("Ana Marsh", db.personDao().byId(ana.id)!!.name)
-  }
+      val success = gated.uiState.value as PeopleUiState.Success
+      assertEquals(bo.id, success.editing?.personId)
+      assertNull(success.editing?.error)
+      assertEquals("Ana Marsh", db.personDao().byId(ana.id)!!.name)
+      collector.cancel()
+    }
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   @Test
-  fun rename_landingLateAsNameTaken_doesNotStampADifferentOpenRowsError() = runTest {
-    val (ana, marvin, bo) = threePeople()
-    val gate = CompletableDeferred<Unit>()
-    val gated = gatedViewModel(gate)
+  fun rename_landingLateAsNameTaken_doesNotStampADifferentOpenRowsError() =
+    runTest(UnconfinedTestDispatcher()) {
+      val (ana, marvin, bo) = threePeople()
+      val gate = CompletableDeferred<Unit>()
+      val gated = gatedViewModel(gate)
+      val collector = launch { gated.uiState.collect {} }
 
-    gated.startRename(ana.id)
-    gated.rename(ana.id, marvin.name) // will resolve to NameTaken once the gate opens
-    gated.startRename(bo.id)
-    gate.complete(Unit)
+      gated.startRename(ana.id)
+      gated.rename(ana.id, marvin.name) // will resolve to NameTaken once the gate opens
+      gated.startRename(bo.id)
+      gate.complete(Unit)
 
-    // Bo's row must still be open with no error: Ana's collision is not Bo's to show.
-    val success =
-      gated.uiState.first { it is PeopleUiState.Success && it.editing?.personId == bo.id }
-        as PeopleUiState.Success
-    assertNull(success.editing!!.error)
-  }
+      // Bo's row must still be open with no error: Ana's collision is not Bo's to show.
+      val success = gated.uiState.value as PeopleUiState.Success
+      assertEquals(bo.id, success.editing?.personId)
+      assertNull(success.editing?.error)
+      collector.cancel()
+    }
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   @Test
-  fun rename_landingLateAfterBeingCancelled_doesNotReopenTheRow() = runTest {
-    val (ana, _, _) = threePeople()
-    val gate = CompletableDeferred<Unit>()
-    val gated = gatedViewModel(gate)
+  fun rename_landingLateAfterBeingCancelledAsSuccess_doesNotReopenTheRow() =
+    runTest(UnconfinedTestDispatcher()) {
+      val (ana, _, _) = threePeople()
+      val gate = CompletableDeferred<Unit>()
+      val gated = gatedViewModel(gate)
+      val collector = launch { gated.uiState.collect {} }
 
-    gated.startRename(ana.id)
-    gated.rename(ana.id, "Ana Marsh")
-    gated.cancelRename()
-    gate.complete(Unit)
+      gated.startRename(ana.id)
+      gated.rename(ana.id, "Ana Marsh")
+      gated.cancelRename()
+      gate.complete(Unit)
 
-    // Nothing should ever reopen Ana's row: the old `?: RenameEdit(id)` fallback would have.
-    val success =
-      gated.uiState.first {
-        it is PeopleUiState.Success &&
-          it.people.any { p -> p.id == ana.id && p.name == "Ana Marsh" }
-      } as PeopleUiState.Success
-    assertNull(success.editing)
-  }
+      // Can't distinguish the guard from the pre-fix code by itself: the old code also set
+      // `_editing.value = null` unconditionally on Success, which is what an already-null
+      // `_editing` needs anyway. Kept alongside the NameTaken variant below — the one that
+      // actually exercises the old `?: RenameEdit(id)` fallback — as a direct assertion of the
+      // guard's Success-branch behaviour, so a future change that makes Success reopen the row
+      // some other way still has a test in its way.
+      val success = gated.uiState.value as PeopleUiState.Success
+      assertNull(success.editing)
+      assertEquals("Ana Marsh", db.personDao().byId(ana.id)!!.name)
+      collector.cancel()
+    }
+
+  @OptIn(ExperimentalCoroutinesApi::class)
+  @Test
+  fun rename_landingLateAfterBeingCancelledAsNameTaken_doesNotReopenTheRow() =
+    runTest(UnconfinedTestDispatcher()) {
+      val (ana, marvin, _) = threePeople()
+      val gate = CompletableDeferred<Unit>()
+      val gated = gatedViewModel(gate)
+      val collector = launch { gated.uiState.collect {} }
+
+      gated.startRename(ana.id)
+      gated.rename(ana.id, marvin.name) // will resolve to NameTaken once the gate opens
+      gated.cancelRename()
+      gate.complete(Unit)
+
+      // This is the variant that actually distinguishes the fix: the old
+      // `(current ?: RenameEdit(id)).copy(error = message)` fallback only fired on NameTaken, and
+      // would have reopened Ana's row here with her collision error even though she'd cancelled.
+      val success = gated.uiState.value as PeopleUiState.Success
+      assertNull(success.editing)
+      collector.cancel()
+    }
 
   private data class ThreePeople(
     val ana: PersonEntity,
@@ -237,10 +287,12 @@ class PeopleViewModelTest {
 
   /**
    * A [PeopleViewModel] whose repository delays exactly at
-   * [PersonDao.byNormalizedNameIncludingDeleted] — the first suspension point inside
-   * `PersonRepository.rename`, reached regardless of whether it ends in success or a collision —
-   * until [gate] completes. This is what lets a test start a second rename on a different person
-   * while the first is still in flight, deterministically rather than by timing.
+   * [PersonDao.byNormalizedNameIncludingDeleted] — reached before the collision check in
+   * `PersonRepository.rename` and hit regardless of whether that check ends in success or a
+   * collision (`personDao.byId(id)` suspends first, but always resolves immediately against the
+   * synchronous executor) — until [gate] completes. This is what lets a test start a second rename
+   * on a different person while the first is still in flight, deterministically rather than by
+   * timing.
    */
   private fun gatedViewModel(gate: CompletableDeferred<Unit>): PeopleViewModel {
     val dao =

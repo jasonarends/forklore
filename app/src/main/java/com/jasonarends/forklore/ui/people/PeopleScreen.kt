@@ -18,7 +18,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -165,8 +164,11 @@ private fun PersonRow(
 
 @Composable
 private fun AddPersonRow(onAddPerson: (String, Boolean) -> Unit, modifier: Modifier = Modifier) {
-  var name by remember { mutableStateOf("") }
-  var isHouseholdMember by remember { mutableStateOf(true) }
+  // rememberSaveable, not remember: this row is a LazyColumn item, so scrolling it off-screen and
+  // back (or a rotation) can recreate the composable, and half-typed input shouldn't vanish either
+  // way.
+  var name by rememberSaveable { mutableStateOf("") }
+  var isHouseholdMember by rememberSaveable { mutableStateOf(true) }
 
   Column(modifier = modifier.fillMaxWidth()) {
     Row(
