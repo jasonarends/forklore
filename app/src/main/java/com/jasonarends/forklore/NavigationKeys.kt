@@ -8,8 +8,8 @@ import kotlinx.serialization.Serializable
 @Serializable data object AddPlace : NavKey
 
 /**
- * A stub destination: this issue only needs somewhere for a tapped place to go. #2 fills the screen
- * in; the navigation key carrying [placeEntryId] is the contract between the two.
+ * One restaurant in one list. Keyed by the `PlaceEntry` id, not the place id: the same place can
+ * appear on two lists with two different verdicts.
  */
 @Serializable data class PlaceDetail(val placeEntryId: String) : NavKey
 

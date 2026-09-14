@@ -82,6 +82,11 @@ interface PlaceEntryDao {
   @Query("SELECT * FROM place_entries WHERE id = :id")
   suspend fun byId(id: String): PlaceEntryEntity?
 
+  /** The detail screen's read model: one entry with the place it points at, or null once gone. */
+  @Transaction
+  @Query("SELECT * FROM place_entries WHERE id = :id AND deletedAt IS NULL")
+  fun observeById(id: String): Flow<PlaceEntryWithPlace?>
+
   @Transaction
   @Query("SELECT * FROM place_entries WHERE placeListId = :placeListId AND deletedAt IS NULL")
   fun observeForList(placeListId: String): Flow<List<PlaceEntryWithPlace>>

@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -15,17 +17,18 @@ import com.jasonarends.forklore.ui.people.PeopleScreen
 import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
 import com.jasonarends.forklore.ui.placelist.PlaceListScreen
 
+/**
+ * [backStack] defaults to a fresh one for real use; tests hoist their own so they can push and pop
+ * it directly, exercising the same [NavDisplay] wiring production uses.
+ */
 @Composable
-fun MainNavigation() {
-  val backStack = rememberNavBackStack(Main)
-
+fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main)) {
   NavDisplay(
     backStack = backStack,
     onBack = { backStack.removeLastOrNull() },
-    // Without these, entries share the host's single ViewModelStore/saved-state holder instead
-    // of getting their own: a screen popped off the back stack and pushed again (e.g. AddPlace,
-    // visited twice in one app launch) gets back the *same* ViewModel instance, stale state and
-    // all, rather than a fresh one.
+    // Without these, every entry's `viewModel(factory = ...)` resolves against one shared
+    // ViewModelStore keyed only by class: opening a second PlaceEntry reuses the first one's
+    // PlaceDetailViewModel, and AddPlace visited twice gets back its already-saved ViewModel.
     entryDecorators =
       listOf(
         rememberSaveableStateHolderNavEntryDecorator(),

@@ -27,6 +27,8 @@ class PlaceRepository(
   fun observeList(placeListId: String): Flow<List<PlaceEntryWithPlace>> =
     placeEntryDao.observeForList(placeListId)
 
+  fun observeEntry(entryId: String): Flow<PlaceEntryWithPlace?> = placeEntryDao.observeById(entryId)
+
   fun observeByStatus(placeListId: String, status: PlaceStatus): Flow<List<PlaceEntryWithPlace>> =
     placeEntryDao.observeByStatus(placeListId, status)
 
@@ -98,9 +100,15 @@ class PlaceRepository(
     addToList(placeListId, placeId, note = note)
   }
 
+  /**
+   * Read-modify-write, so it runs inside a transaction: two concurrent calls (a status tap and a
+   * note save, say) reading the same pre-write row would otherwise silently revert each other.
+   */
   suspend fun updateEntry(entryId: String, change: (PlaceEntryEntity) -> PlaceEntryEntity) {
-    val current = placeEntryDao.byId(entryId) ?: return
-    placeEntryDao.update(change(current).copy(updatedAt = clock.nowMillis()))
+    database.withTransaction {
+      val current = placeEntryDao.byId(entryId) ?: return@withTransaction
+      placeEntryDao.update(change(current).copy(updatedAt = clock.nowMillis()))
+    }
   }
 
   /**
@@ -109,8 +117,10 @@ class PlaceRepository(
    * independently revivable gets its own tombstone at that point.
    */
   suspend fun removeEntry(entryId: String) {
-    val now = clock.nowMillis()
-    val current = placeEntryDao.byId(entryId) ?: return
-    placeEntryDao.update(current.copy(deletedAt = now, updatedAt = now))
+    database.withTransaction {
+      val now = clock.nowMillis()
+      val current = placeEntryDao.byId(entryId) ?: return@withTransaction
+      placeEntryDao.update(current.copy(deletedAt = now, updatedAt = now))
+    }
   }
 }
