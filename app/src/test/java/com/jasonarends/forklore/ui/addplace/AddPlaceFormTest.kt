@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -20,17 +21,19 @@ class AddPlaceFormTest {
   @Test
   fun save_isDisabledUntilANameIsEntered() {
     composeTestRule.setContent {
-      AddPlaceForm(
-        state = AddPlaceUiState(),
-        placeListReady = true,
-        onNameChange = {},
-        onBranchLabelChange = {},
-        onAddressChange = {},
-        onNoteChange = {},
-        onWarningChange = {},
-        onSave = {},
-        onCancel = {},
-      )
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(),
+          placeListReady = true,
+          onNameChange = {},
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onSave = {},
+          onCancel = {},
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Save").performScrollTo().assertIsNotEnabled()
@@ -40,17 +43,19 @@ class AddPlaceFormTest {
   fun typingAName_enablesSaveAndReportsIt() {
     var typed = ""
     composeTestRule.setContent {
-      AddPlaceForm(
-        state = AddPlaceUiState(name = typed),
-        placeListReady = true,
-        onNameChange = { typed = it },
-        onBranchLabelChange = {},
-        onAddressChange = {},
-        onNoteChange = {},
-        onWarningChange = {},
-        onSave = {},
-        onCancel = {},
-      )
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(name = typed),
+          placeListReady = true,
+          onNameChange = { typed = it },
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onSave = {},
+          onCancel = {},
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Name").performTextInput("Halberd")
@@ -62,17 +67,19 @@ class AddPlaceFormTest {
   fun tappingSave_invokesTheCallback_whenAPlaceHasAName() {
     var saved = false
     composeTestRule.setContent {
-      AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd"),
-        placeListReady = true,
-        onNameChange = {},
-        onBranchLabelChange = {},
-        onAddressChange = {},
-        onNoteChange = {},
-        onWarningChange = {},
-        onSave = { saved = true },
-        onCancel = {},
-      )
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(name = "Halberd"),
+          placeListReady = true,
+          onNameChange = {},
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onSave = { saved = true },
+          onCancel = {},
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Save").performScrollTo().assertIsEnabled().performClick()
@@ -83,17 +90,19 @@ class AddPlaceFormTest {
   @Test
   fun save_isDisabledWhileTheDefaultListIsStillLoading() {
     composeTestRule.setContent {
-      AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd"),
-        placeListReady = false,
-        onNameChange = {},
-        onBranchLabelChange = {},
-        onAddressChange = {},
-        onNoteChange = {},
-        onWarningChange = {},
-        onSave = {},
-        onCancel = {},
-      )
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(name = "Halberd"),
+          placeListReady = false,
+          onNameChange = {},
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onSave = {},
+          onCancel = {},
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Save").performScrollTo().assertIsNotEnabled()
@@ -102,17 +111,19 @@ class AddPlaceFormTest {
   @Test
   fun save_isDisabledWhileASaveIsAlreadyInFlight() {
     composeTestRule.setContent {
-      AddPlaceForm(
-        state = AddPlaceUiState(name = "Halberd", saving = true),
-        placeListReady = true,
-        onNameChange = {},
-        onBranchLabelChange = {},
-        onAddressChange = {},
-        onNoteChange = {},
-        onWarningChange = {},
-        onSave = {},
-        onCancel = {},
-      )
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(name = "Halberd", saving = true),
+          placeListReady = true,
+          onNameChange = {},
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onSave = {},
+          onCancel = {},
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Save").performScrollTo().assertIsNotEnabled()
@@ -122,17 +133,19 @@ class AddPlaceFormTest {
   fun tappingCancel_invokesTheCallback() {
     var cancelled = false
     composeTestRule.setContent {
-      AddPlaceForm(
-        state = AddPlaceUiState(),
-        placeListReady = true,
-        onNameChange = {},
-        onBranchLabelChange = {},
-        onAddressChange = {},
-        onNoteChange = {},
-        onWarningChange = {},
-        onSave = {},
-        onCancel = { cancelled = true },
-      )
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(),
+          placeListReady = true,
+          onNameChange = {},
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onSave = {},
+          onCancel = { cancelled = true },
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Cancel").performScrollTo().performClick()

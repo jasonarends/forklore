@@ -1,5 +1,6 @@
 package com.jasonarends.forklore.ui.theme
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -57,38 +58,29 @@ fun Modifier.tilt(degrees: Float): Modifier = graphicsLayer { rotationZ = degree
 
 /**
  * A hand-drawn-style ellipse around the selected rating word (issue #15's "circled rating"): the
- * selected value is circled, not filled or highlighted. Drawn after content, padded outward from
- * its bounds, rotated slightly for the hand-drawn feel.
+ * selected value is circled, not filled or highlighted. `drawWithContent` sits *outside* the
+ * `padding` in this chain — the same ordering as the familiar `background().padding()` idiom — so
+ * the oval's draw bounds are the full padded box, not just the text's own bounds, and `FlowRow`
+ * reserves that padded size for the item. That's what keeps the circle from overlapping neighboring
+ * words. Single caller ([ui.components.RatingScale]'s `RatingPicker`), so the
+ * padding/stroke/rotation are spec constants, not parameters.
  */
-fun Modifier.circledSelection(
-  color: Color,
-  strokeWidth: Dp = 2.5.dp,
-  horizontalPadding: Dp = 8.dp,
-  verticalPadding: Dp = 7.dp,
-  rotationDegrees: Float = -3f,
-): Modifier = drawWithContent {
-  drawContent()
-  val padX = horizontalPadding.toPx()
-  val padY = verticalPadding.toPx()
-  rotate(rotationDegrees, pivot = center) {
-    drawOval(
-      color = color,
-      topLeft = Offset(-padX, -padY),
-      size = Size(size.width + padX * 2, size.height + padY * 2),
-      style = Stroke(width = strokeWidth.toPx()),
-    )
-  }
-}
+fun Modifier.circledSelection(color: Color): Modifier =
+  this.drawWithContent {
+      drawContent()
+      rotate(-3f, pivot = center) {
+        drawOval(color = color, style = Stroke(width = 2.5.dp.toPx()))
+      }
+    }
+    .padding(horizontal = 8.dp, vertical = 7.dp)
 
-/** A wavy stamp-colored underline under the selected revisit-intent word. */
-fun Modifier.wavyUnderline(
-  color: Color,
-  strokeWidth: Dp = 1.5.dp,
-  amplitude: Dp = 1.5.dp,
-  wavelength: Dp = 6.dp,
-): Modifier = drawBehind {
-  val amplitudePx = amplitude.toPx()
-  val wavelengthPx = wavelength.toPx()
+/**
+ * A wavy stamp-colored underline under the selected revisit-intent word. Single caller
+ * ([ui.components.RevisitIntent]), so amplitude/wavelength/stroke width are spec constants.
+ */
+fun Modifier.wavyUnderline(color: Color): Modifier = drawBehind {
+  val amplitudePx = 1.5.dp.toPx()
+  val wavelengthPx = 6.dp.toPx()
   val y = size.height + amplitudePx
   val path =
     Path().apply {
@@ -102,23 +94,31 @@ fun Modifier.wavyUnderline(
         up = !up
       }
     }
-  drawPath(path, color = color, style = Stroke(width = strokeWidth.toPx()))
+  drawPath(path, color = color, style = Stroke(width = 1.5.dp.toPx()))
 }
 
 /**
  * A dashed rounded-rect outline — the warning [ui.components.NoteField] variant on place detail.
+ * `drawWithContent` (content painted first, dashes on top) rather than `drawBehind`, since the
+ * dashes sit on a `Surface` with an opaque fill: painting behind it let the fill cover the inner
+ * half of the stroke, rendering as a 1dp line instead of the spec's 2dp. The rect is inset by half
+ * the stroke width so the full stroke paints inside the element's bounds. Single caller
+ * ([ui.components] `NoteField`'s warning variant is rendered by `PlaceDetailScreen.WarningCard`),
+ * so stroke/corner/dash metrics are spec constants.
  */
-fun Modifier.dashedBorder(
-  color: Color,
-  strokeWidth: Dp = 2.dp,
-  cornerRadius: Dp = 3.dp,
-  dashLength: Dp = 6.dp,
-  gapLength: Dp = 4.dp,
-): Modifier = drawBehind {
-  val stroke =
-    Stroke(
-      width = strokeWidth.toPx(),
-      pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashLength.toPx(), gapLength.toPx())),
-    )
-  drawRoundRect(color = color, cornerRadius = CornerRadius(cornerRadius.toPx()), style = stroke)
+fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
+  drawContent()
+  val strokePx = 2.dp.toPx()
+  val inset = strokePx / 2
+  drawRoundRect(
+    color = color,
+    topLeft = Offset(inset, inset),
+    size = Size(size.width - strokePx, size.height - strokePx),
+    cornerRadius = CornerRadius(3.dp.toPx()),
+    style =
+      Stroke(
+        width = strokePx,
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+      ),
+  )
 }

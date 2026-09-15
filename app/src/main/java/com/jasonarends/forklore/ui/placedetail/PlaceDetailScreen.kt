@@ -44,15 +44,21 @@ import com.jasonarends.forklore.ui.theme.dashedBorder
 @Composable
 fun PlaceDetailScreen(
   placeEntryId: String,
+  onBack: () -> Unit,
   modifier: Modifier = Modifier,
-  onBack: () -> Unit = {},
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
+  // which
+  // isn't smart-castable (each read can return a different instance across recompositions), so both
+  // the title below and the `when` in Scaffold's content match on this same captured `current`
+  // instead of re-reading `state` a second time and risking the two disagreeing.
+  val current = state
   // The top bar repeats the same name/branch the body heading shows (see PlaceDetail below), so
   // it needs the name before the rest of the screen is ready to render.
   val title =
-    (state as? PlaceDetailUiState.Success)?.entry?.let {
+    (current as? PlaceDetailUiState.Success)?.entry?.let {
       listOfNotNull(it.place.name, it.place.branchLabel).joinToString(" · ")
     } ?: "Place"
   Scaffold(
@@ -60,7 +66,7 @@ fun PlaceDetailScreen(
     topBar = { LedgerTopBar(title = title, subtitle = "the receipts", onBack = onBack) },
     containerColor = ForkloreTheme.colors.paper,
   ) { innerPadding ->
-    when (val current = state) {
+    when (current) {
       PlaceDetailUiState.Loading -> Unit
       PlaceDetailUiState.NotFound ->
         EmptyState("This place couldn't be found.", Modifier.padding(innerPadding))
@@ -169,7 +175,7 @@ internal fun PlaceDetail(
 private fun WarningCard(warning: String) {
   val colors = ForkloreTheme.colors
   Surface(
-    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).dashedBorder(colors.stamp, 2.dp, 3.dp),
+    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).dashedBorder(colors.stamp),
     shape = RoundedCornerShape(3.dp),
     color = colors.card,
     contentColor = colors.stamp,

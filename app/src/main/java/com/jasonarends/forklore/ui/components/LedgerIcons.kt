@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -24,6 +26,12 @@ internal enum class LedgerGlyph {
   CircleSlash,
 }
 
+/**
+ * [contentDescription] is opt-in and `null` by default: most callers place this next to a [Text]
+ * that already says the same thing (the "Avoid" stamp, the warning card's own message), and a
+ * screen reader announcing the icon too would just repeat it. Pass one where the icon carries
+ * meaning nothing nearby already states.
+ */
 @Composable
 internal fun LedgerIcon(
   glyph: LedgerGlyph,
@@ -31,8 +39,15 @@ internal fun LedgerIcon(
   modifier: Modifier = Modifier,
   size: Dp = 14.dp,
   strokeWidth: Dp = 1.6.dp,
+  contentDescription: String? = null,
 ) {
-  Canvas(modifier.size(size)) {
+  val canvasModifier =
+    if (contentDescription != null) {
+      modifier.size(size).semantics { this.contentDescription = contentDescription }
+    } else {
+      modifier.size(size)
+    }
+  Canvas(canvasModifier) {
     val stroke = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
     val w = this.size.width
     val h = this.size.height

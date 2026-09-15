@@ -11,7 +11,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.dp
 
-private val LocalForkloreColors = staticCompositionLocalOf { LightForkloreColors }
+// error(), not a color fallback: a composable rendered outside ForkloreTheme should fail loudly
+// rather than silently painting light-mode paper on a dark device.
+private val LocalForkloreColors =
+  staticCompositionLocalOf<ForkloreColors> { error("ForkloreTheme not applied") }
 
 // 2px cards, 3px buttons/chips/fields, 4px the stamp (see issue #15, "Shape, borders, elevation").
 private val ForkloreShapes =
@@ -43,40 +46,23 @@ object ForkloreTheme {
   @Composable
   operator fun invoke(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     val ledgerColors = if (darkTheme) DarkForkloreColors else LightForkloreColors
+    val base = if (darkTheme) darkColorScheme() else lightColorScheme()
     val colorScheme =
-      if (darkTheme) {
-        darkColorScheme(
-          background = ledgerColors.paper,
-          surface = ledgerColors.card,
-          onBackground = ledgerColors.ink,
-          onSurface = ledgerColors.ink,
-          primary = ledgerColors.ink,
-          onPrimary = ledgerColors.card,
-          onSurfaceVariant = ledgerColors.ink2,
-          outline = ledgerColors.cardBorder,
-          outlineVariant = ledgerColors.rule,
-          error = ledgerColors.stamp,
-          onError = ledgerColors.card,
-          tertiary = ledgerColors.rust,
-          onTertiary = ledgerColors.card,
-        )
-      } else {
-        lightColorScheme(
-          background = ledgerColors.paper,
-          surface = ledgerColors.card,
-          onBackground = ledgerColors.ink,
-          onSurface = ledgerColors.ink,
-          primary = ledgerColors.ink,
-          onPrimary = ledgerColors.card,
-          onSurfaceVariant = ledgerColors.ink2,
-          outline = ledgerColors.cardBorder,
-          outlineVariant = ledgerColors.rule,
-          error = ledgerColors.stamp,
-          onError = ledgerColors.card,
-          tertiary = ledgerColors.rust,
-          onTertiary = ledgerColors.card,
-        )
-      }
+      base.copy(
+        background = ledgerColors.paper,
+        surface = ledgerColors.card,
+        onBackground = ledgerColors.ink,
+        onSurface = ledgerColors.ink,
+        primary = ledgerColors.ink,
+        onPrimary = ledgerColors.card,
+        onSurfaceVariant = ledgerColors.ink2,
+        outline = ledgerColors.cardBorder,
+        outlineVariant = ledgerColors.rule,
+        error = ledgerColors.stamp,
+        onError = ledgerColors.card,
+        tertiary = ledgerColors.rust,
+        onTertiary = ledgerColors.card,
+      )
 
     CompositionLocalProvider(LocalForkloreColors provides ledgerColors) {
       MaterialTheme(

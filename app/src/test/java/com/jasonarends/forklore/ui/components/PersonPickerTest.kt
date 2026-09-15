@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.jasonarends.forklore.data.db.PersonEntity
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -26,12 +27,14 @@ class PersonPickerTest {
     var selected by mutableStateOf(setOf<String>())
 
     compose.setContent {
-      PersonPicker(
-        people = listOf(robin, dale),
-        selected = selected,
-        onSelectionChange = { selected = it },
-        onCreatePerson = {},
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = listOf(robin, dale),
+          selected = selected,
+          onSelectionChange = { selected = it },
+          onCreatePerson = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("person-picker-chip-${robin.id}").performClick()
@@ -51,13 +54,15 @@ class PersonPickerTest {
     var selected by mutableStateOf(setOf<String>())
 
     compose.setContent {
-      PersonPicker(
-        people = listOf(robin, dale),
-        selected = selected,
-        onSelectionChange = { selected = it },
-        onCreatePerson = {},
-        multiSelect = false,
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = listOf(robin, dale),
+          selected = selected,
+          onSelectionChange = { selected = it },
+          onCreatePerson = {},
+          multiSelect = false,
+        )
+      }
     }
 
     compose.onNodeWithTag("person-picker-chip-${robin.id}").performClick()
@@ -76,12 +81,14 @@ class PersonPickerTest {
     val dale = person("Dale", household = false)
 
     compose.setContent {
-      PersonPicker(
-        people = listOf(ana, dale),
-        selected = emptySet(),
-        onSelectionChange = {},
-        onCreatePerson = {},
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = listOf(ana, dale),
+          selected = emptySet(),
+          onSelectionChange = {},
+          onCreatePerson = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("person-picker-chip-${ana.id}").assertExists()
@@ -94,12 +101,14 @@ class PersonPickerTest {
     val dale = person("Dale", household = false)
 
     compose.setContent {
-      PersonPicker(
-        people = listOf(ana, dale),
-        selected = emptySet(),
-        onSelectionChange = {},
-        onCreatePerson = {},
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = listOf(ana, dale),
+          selected = emptySet(),
+          onSelectionChange = {},
+          onCreatePerson = {},
+        )
+      }
     }
 
     compose.onNodeWithText("Show everyone (1 more)").performClick()
@@ -112,12 +121,14 @@ class PersonPickerTest {
     val dale = person("Dale", household = false)
 
     compose.setContent {
-      PersonPicker(
-        people = listOf(dale),
-        selected = setOf(dale.id),
-        onSelectionChange = {},
-        onCreatePerson = {},
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = listOf(dale),
+          selected = setOf(dale.id),
+          onSelectionChange = {},
+          onCreatePerson = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("person-picker-chip-${dale.id}").assertExists()
@@ -128,12 +139,14 @@ class PersonPickerTest {
     var created: String? = null
 
     compose.setContent {
-      PersonPicker(
-        people = emptyList(),
-        selected = emptySet(),
-        onSelectionChange = {},
-        onCreatePerson = { created = it },
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = emptyList(),
+          selected = emptySet(),
+          onSelectionChange = {},
+          onCreatePerson = { created = it },
+        )
+      }
     }
 
     compose.onNodeWithTag("person-picker-new-name").performTextInput("  Casey  ")
@@ -152,15 +165,17 @@ class PersonPickerTest {
     var selected by mutableStateOf(setOf<String>())
 
     compose.setContent {
-      PersonPicker(
-        people = people,
-        selected = selected,
-        onSelectionChange = { selected = it },
-        onCreatePerson = {
-          people = people + casey
-          selected = setOf(casey.id)
-        },
-      )
+      ForkloreTheme {
+        PersonPicker(
+          people = people,
+          selected = selected,
+          onSelectionChange = { selected = it },
+          onCreatePerson = {
+            people = people + casey
+            selected = setOf(casey.id)
+          },
+        )
+      }
     }
 
     compose.onNodeWithTag("person-picker-new-name").performTextInput("Casey")

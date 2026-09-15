@@ -8,6 +8,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -16,7 +17,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewLightDark
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jasonarends.forklore.data.db.Rating
@@ -37,42 +37,28 @@ val Rating.label: String
       Rating.LIFE_CHANGING -> "Life-changing"
     }
 
-private enum class RatingColorRole {
-  Ink2,
-  Ink,
-  Rust,
-}
-
 /**
- * Escalating size/weight/italic/color per step — the top of the scale is what the verbal scale
- * exists to preserve, so it reads loudest (issue #15's typography table).
+ * Escalating size/weight/italic/color per step, straight from issue #15's typography table — the
+ * top of the scale is what the verbal scale exists to preserve, so it reads loudest.
  */
-private data class RatingStep(
-  val fontSize: TextUnit,
-  val fontWeight: FontWeight,
-  val italic: Boolean,
-  val colorRole: RatingColorRole,
-)
-
-private val Rating.step: RatingStep
-  get() =
-    when (this) {
-      Rating.BAD -> RatingStep(12.sp, FontWeight.Normal, false, RatingColorRole.Ink2)
-      Rating.MID -> RatingStep(13.sp, FontWeight.Normal, false, RatingColorRole.Ink2)
-      Rating.FINE -> RatingStep(14.sp, FontWeight.Normal, false, RatingColorRole.Ink2)
-      Rating.GOOD -> RatingStep(15.sp, FontWeight.Normal, false, RatingColorRole.Ink)
-      Rating.EXCELLENT -> RatingStep(17.sp, FontWeight.SemiBold, false, RatingColorRole.Ink)
-      Rating.PHENOMENAL -> RatingStep(20.sp, FontWeight.Bold, true, RatingColorRole.Rust)
-      Rating.LIFE_CHANGING -> RatingStep(24.sp, FontWeight.Bold, true, RatingColorRole.Rust)
-    }
-
 @Composable
-private fun RatingColorRole.resolve(): Color {
+private fun Rating.ratingStyle(): Pair<TextStyle, Color> {
   val colors = ForkloreTheme.colors
+  fun style(size: Float, weight: FontWeight, italic: Boolean = false) =
+    TextStyle(
+      fontFamily = ZillaSlab,
+      fontSize = size.sp,
+      fontWeight = weight,
+      fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+    )
   return when (this) {
-    RatingColorRole.Ink2 -> colors.ink2
-    RatingColorRole.Ink -> colors.ink
-    RatingColorRole.Rust -> colors.rust
+    Rating.BAD -> style(12f, FontWeight.Normal) to colors.ink2
+    Rating.MID -> style(13f, FontWeight.Normal) to colors.ink2
+    Rating.FINE -> style(14f, FontWeight.Normal) to colors.ink2
+    Rating.GOOD -> style(15f, FontWeight.Normal) to colors.ink
+    Rating.EXCELLENT -> style(17f, FontWeight.SemiBold) to colors.ink
+    Rating.PHENOMENAL -> style(20f, FontWeight.Bold, italic = true) to colors.rust
+    Rating.LIFE_CHANGING -> style(24f, FontWeight.Bold, italic = true) to colors.rust
   }
 }
 
@@ -96,27 +82,18 @@ fun RatingPicker(
   ) {
     Rating.entries.forEach { option ->
       val isSelected = option == rating
-      val step = option.step
-      val color = step.colorRole.resolve()
-      var textModifier: Modifier =
-        Modifier.selectable(
-          selected = isSelected,
-          onClick = { onRatingChange(option.takeUnless { it == rating }) },
-          role = Role.RadioButton,
-        )
-      if (isSelected) {
-        textModifier = textModifier.circledSelection(color = stampColor)
-      }
+      val (style, color) = option.ratingStyle()
       Text(
         text = option.label,
-        modifier = textModifier,
-        style =
-          TextStyle(
-            fontFamily = ZillaSlab,
-            fontSize = step.fontSize,
-            fontWeight = step.fontWeight,
-            fontStyle = if (step.italic) FontStyle.Italic else FontStyle.Normal,
-          ),
+        modifier =
+          Modifier.minimumInteractiveComponentSize()
+            .selectable(
+              selected = isSelected,
+              onClick = { onRatingChange(option.takeUnless { it == rating }) },
+              role = Role.RadioButton,
+            )
+            .then(if (isSelected) Modifier.circledSelection(stampColor) else Modifier),
+        style = style,
         color = color,
       )
     }

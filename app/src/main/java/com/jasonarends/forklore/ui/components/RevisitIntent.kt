@@ -7,6 +7,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -46,16 +47,16 @@ fun RevisitIntentPicker(
   ) {
     RevisitIntent.entries.forEach { option ->
       val isSelected = option == intent
-      var textModifier: Modifier =
-        Modifier.selectable(
-          selected = isSelected,
-          onClick = { onIntentChange(option.takeUnless { it == intent }) },
-          role = Role.RadioButton,
-        )
-      if (isSelected) textModifier = textModifier.wavyUnderline(color = colors.stamp)
       Text(
         text = option.label,
-        modifier = textModifier,
+        modifier =
+          Modifier.minimumInteractiveComponentSize()
+            .selectable(
+              selected = isSelected,
+              onClick = { onIntentChange(option.takeUnless { it == intent }) },
+              role = Role.RadioButton,
+            )
+            .then(if (isSelected) Modifier.wavyUnderline(colors.stamp) else Modifier),
         style = ForkloreType.button,
         color = colors.ink,
       )

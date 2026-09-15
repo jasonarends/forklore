@@ -10,6 +10,7 @@ import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -23,20 +24,22 @@ class PlaceListTest {
   @Test
   fun showsEachPlaceWithItsBranchStatusAndFoodRating() {
     composeTestRule.setContent {
-      PlaceList(
-        entries =
-          listOf(
-            entry("Halberd"),
-            entry(
-              "Fifth Avenue Social",
-              "Kansas",
-              status = PlaceStatus.AVOID,
-              foodRating = Rating.EXCELLENT,
+      ForkloreTheme {
+        PlaceList(
+          entries =
+            listOf(
+              entry("Halberd"),
+              entry(
+                "Fifth Avenue Social",
+                "Kansas",
+                status = PlaceStatus.AVOID,
+                foodRating = Rating.EXCELLENT,
+              ),
             ),
-          ),
-        onAddPlace = {},
-        onPlaceClick = {},
-      )
+          onAddPlace = {},
+          onPlaceClick = {},
+        )
+      }
     }
 
     composeTestRule.onNodeWithText("Halberd").assertExists()
@@ -50,7 +53,9 @@ class PlaceListTest {
   @Test
   fun tellsTheUserWhenTheListIsEmpty() {
     composeTestRule.setContent {
-      PlaceList(entries = emptyList(), onAddPlace = {}, onPlaceClick = {})
+      ForkloreTheme {
+        PlaceList(entries = emptyList(), onAddPlace = {}, onPlaceClick = {})
+      }
     }
 
     composeTestRule
@@ -62,7 +67,9 @@ class PlaceListTest {
   fun tappingAddPlace_invokesTheCallback() {
     var clicked = false
     composeTestRule.setContent {
-      PlaceList(entries = emptyList(), onAddPlace = { clicked = true }, onPlaceClick = {})
+      ForkloreTheme {
+        PlaceList(entries = emptyList(), onAddPlace = { clicked = true }, onPlaceClick = {})
+      }
     }
 
     composeTestRule.onNodeWithText("Add a place").performClick()
@@ -75,7 +82,9 @@ class PlaceListTest {
     var clickedId: String? = null
     val place = entry("Halberd")
     composeTestRule.setContent {
-      PlaceList(entries = listOf(place), onAddPlace = {}, onPlaceClick = { clickedId = it })
+      ForkloreTheme {
+        PlaceList(entries = listOf(place), onAddPlace = {}, onPlaceClick = { clickedId = it })
+      }
     }
 
     composeTestRule.onNodeWithText("Halberd").performClick()

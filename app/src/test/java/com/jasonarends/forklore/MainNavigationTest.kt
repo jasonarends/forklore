@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
@@ -32,7 +33,7 @@ class MainNavigationTest {
 
   @Test
   fun addPlaceScreen_isUsableMoreThanOncePerAppLaunch() {
-    composeTestRule.setContent { MainNavigation() }
+    composeTestRule.setContent { ForkloreTheme { MainNavigation() } }
 
     addAPlace("Halberd")
 
@@ -65,7 +66,7 @@ class MainNavigationTest {
     repository.updateEntry(entryB) { it.copy(note = "Note about Mirabel") }
 
     val backStack = NavBackStack<NavKey>(Main)
-    composeTestRule.setContent { MainNavigation(backStack = backStack) }
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
 
     composeTestRule.runOnIdle { backStack.add(PlaceDetail(entryA)) }
     composeTestRule.waitUntilExactlyOneExists(hasText("Note about Halberd"))
@@ -92,7 +93,7 @@ class MainNavigationTest {
 
   @Test
   fun peopleAction_opensThePeopleScreen() {
-    composeTestRule.setContent { MainNavigation() }
+    composeTestRule.setContent { ForkloreTheme { MainNavigation() } }
 
     composeTestRule.onNodeWithText("People").performClick()
 

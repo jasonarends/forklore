@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,13 +16,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
-import com.jasonarends.forklore.ui.theme.ForkloreType
 import com.jasonarends.forklore.ui.theme.tilt
 
 /**
  * The generic ledger chip: outlined ([selected] = false) or filled/"done" ([selected] = true), per
- * issue #15's `.a-chip`/`.a-chip.done`. Shared by every mutually-exclusive picker ([ChoiceChips])
- * and the read-only pending/done statuses in `StatusChip.kt`.
+ * issue #15's `.a-chip`/`.a-chip.done`. Shared by every mutually-exclusive picker ([ChoiceChips]) —
+ * [role] defaults to [Role.RadioButton] for that single-select case, but [PersonPicker]'s
+ * multi-select passes [Role.Checkbox] so TalkBack doesn't announce a "pick one" chip as a "pick one
+ * of many" — and the read-only pending/done statuses in `StatusChip.kt`.
+ * [minimumInteractiveComponentSize] restores the ≥48dp touch target `FilterChip`/`TextButton` gave
+ * for free before this direction replaced them with a bare `Surface`.
  */
 @Composable
 internal fun LedgerChip(
@@ -29,16 +34,16 @@ internal fun LedgerChip(
   onClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
   icon: LedgerGlyph? = null,
+  role: Role = Role.RadioButton,
 ) {
   val colors = ForkloreTheme.colors
   val borderColor = if (selected) colors.ink else colors.ink2
   val contentColor = if (selected) colors.ink else colors.ink2
   val fill = if (selected) colors.rule else Color.Transparent
   val base =
-    if (onClick != null) {
-      modifier.selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-    } else {
-      modifier
+    modifier.minimumInteractiveComponentSize().let {
+      if (onClick != null) it.selectable(selected = selected, onClick = onClick, role = role)
+      else it
     }
   Surface(
     modifier = base,
@@ -54,7 +59,7 @@ internal fun LedgerChip(
       if (icon != null) {
         LedgerIcon(icon, tint = contentColor, modifier = Modifier.padding(end = 4.dp))
       }
-      Text(text = label, style = ForkloreType.chip)
+      Text(text = label, style = MaterialTheme.typography.labelMedium)
     }
   }
 }
@@ -83,7 +88,7 @@ internal fun LedgerStamp(label: String, modifier: Modifier = Modifier) {
         tint = stampColor,
         modifier = Modifier.padding(end = 4.dp),
       )
-      Text(text = label, style = ForkloreType.stamp)
+      Text(text = label, style = MaterialTheme.typography.labelSmall)
     }
   }
 }
