@@ -4,6 +4,10 @@
       Window theme only — it paints the window before Compose draws. The in-app
       palette lives in ui/theme/Theme.kt. There is no android:Theme.Material
       DayNight variant, so the dark counterpart is in values-night/themes.xml.
+      windowBackground is set to the ledger's own paper color (issue #15) so cold start
+      doesn't flash the platform default white before Compose paints.
     -->
-    <style name="Theme.Forklore" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Forklore" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F5EEDC</item>
+    </style>
 </resources>
