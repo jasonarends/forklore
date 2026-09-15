@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.db.normalizeDishName
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -25,15 +26,17 @@ class PeopleContentTest {
   fun addingAPersonDefaultsToHouseholdMember() {
     var added: Pair<String, Boolean>? = null
     compose.setContent {
-      PeopleContent(
-        people = emptyList(),
-        editing = null,
-        onAddPerson = { name, household -> added = name to household },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = {},
-        onRename = { _, _ -> },
-        onCancelRename = {},
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = emptyList(),
+          editing = null,
+          onAddPerson = { name, household -> added = name to household },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = {},
+          onRename = { _, _ -> },
+          onCancelRename = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("people-add-name").performTextInput("  Robin  ")
@@ -46,15 +49,17 @@ class PeopleContentTest {
   fun uncheckingHouseholdBeforeAddingRecordsAnOutsider() {
     var added: Pair<String, Boolean>? = null
     compose.setContent {
-      PeopleContent(
-        people = emptyList(),
-        editing = null,
-        onAddPerson = { name, household -> added = name to household },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = {},
-        onRename = { _, _ -> },
-        onCancelRename = {},
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = emptyList(),
+          editing = null,
+          onAddPerson = { name, household -> added = name to household },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = {},
+          onRename = { _, _ -> },
+          onCancelRename = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("people-add-household").performClick()
@@ -69,15 +74,17 @@ class PeopleContentTest {
     val robin = person("Robin", household = false)
     var toggled: Pair<String, Boolean>? = null
     compose.setContent {
-      PeopleContent(
-        people = listOf(robin),
-        editing = null,
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { id, isHousehold -> toggled = id to isHousehold },
-        onStartRename = {},
-        onRename = { _, _ -> },
-        onCancelRename = {},
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = listOf(robin),
+          editing = null,
+          onAddPerson = { _, _ -> },
+          onToggleHousehold = { id, isHousehold -> toggled = id to isHousehold },
+          onStartRename = {},
+          onRename = { _, _ -> },
+          onCancelRename = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("person-household-switch-${robin.id}").performClick()
@@ -95,18 +102,20 @@ class PeopleContentTest {
     var editing by mutableStateOf<RenameEdit?>(null)
 
     compose.setContent {
-      PeopleContent(
-        people = listOf(dale),
-        editing = editing,
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = { id ->
-          started = id
-          editing = RenameEdit(id)
-        },
-        onRename = { _, _ -> },
-        onCancelRename = { editing = null },
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = listOf(dale),
+          editing = editing,
+          onAddPerson = { _, _ -> },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = { id ->
+            started = id
+            editing = RenameEdit(id)
+          },
+          onRename = { _, _ -> },
+          onCancelRename = { editing = null },
+        )
+      }
     }
 
     compose.onNodeWithTag("person-rename-button-${dale.id}").performClick()
@@ -120,15 +129,17 @@ class PeopleContentTest {
     val dale = person("Dale", household = false)
     var renamed: Pair<String, String>? = null
     compose.setContent {
-      PeopleContent(
-        people = listOf(dale),
-        editing = RenameEdit(dale.id),
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = {},
-        onRename = { id, name -> renamed = id to name },
-        onCancelRename = {},
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = listOf(dale),
+          editing = RenameEdit(dale.id),
+          onAddPerson = { _, _ -> },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = {},
+          onRename = { id, name -> renamed = id to name },
+          onCancelRename = {},
+        )
+      }
     }
 
     compose.onNodeWithTag("person-rename-field-${dale.id}").performTextReplacement("Dale R.")
@@ -142,15 +153,17 @@ class PeopleContentTest {
     val dale = person("Dale", household = false)
     var cancelled = false
     compose.setContent {
-      PeopleContent(
-        people = listOf(dale),
-        editing = RenameEdit(dale.id),
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = {},
-        onRename = { _, _ -> },
-        onCancelRename = { cancelled = true },
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = listOf(dale),
+          editing = RenameEdit(dale.id),
+          onAddPerson = { _, _ -> },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = {},
+          onRename = { _, _ -> },
+          onCancelRename = { cancelled = true },
+        )
+      }
     }
 
     compose.onNodeWithText("Cancel").performClick()
@@ -163,15 +176,17 @@ class PeopleContentTest {
     val dale = person("Dale", household = false)
     val robin = person("Robin", household = false)
     compose.setContent {
-      PeopleContent(
-        people = listOf(dale, robin),
-        editing = RenameEdit(dale.id, "Someone is already named \"Robin\"."),
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = {},
-        onRename = { _, _ -> },
-        onCancelRename = {},
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = listOf(dale, robin),
+          editing = RenameEdit(dale.id, "Someone is already named \"Robin\"."),
+          onAddPerson = { _, _ -> },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = {},
+          onRename = { _, _ -> },
+          onCancelRename = {},
+        )
+      }
     }
 
     // Dale is mid-edit with the conflict visible...
@@ -184,15 +199,17 @@ class PeopleContentTest {
   @Test
   fun emptyStateInvitesAddingTheFirstPerson() {
     compose.setContent {
-      PeopleContent(
-        people = emptyList(),
-        editing = null,
-        onAddPerson = { _, _ -> },
-        onToggleHousehold = { _, _ -> },
-        onStartRename = {},
-        onRename = { _, _ -> },
-        onCancelRename = {},
-      )
+      ForkloreTheme {
+        PeopleContent(
+          people = emptyList(),
+          editing = null,
+          onAddPerson = { _, _ -> },
+          onToggleHousehold = { _, _ -> },
+          onStartRename = {},
+          onRename = { _, _ -> },
+          onCancelRename = {},
+        )
+      }
     }
 
     compose.onNodeWithText("No one yet. Add someone above.").assertExists()

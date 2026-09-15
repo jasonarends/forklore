@@ -15,6 +15,7 @@ import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -28,14 +29,16 @@ class PlaceDetailScreenTest {
   @Test
   fun aPlaceWithNoRatingsAndNoNote_rendersCleanly() {
     compose.setContent {
-      PlaceDetail(
-        entry = entry("Halberd"),
-        onStatusChange = {},
-        onFoodRatingChange = {},
-        onServiceRatingChange = {},
-        onRevisitIntentChange = {},
-        onNoteChange = {},
-      )
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+        )
+      }
     }
 
     compose.onNodeWithText("Halberd").assertExists()
@@ -56,29 +59,31 @@ class PlaceDetailScreenTest {
         updatedAt = 0,
       )
     compose.setContent {
-      PlaceDetail(
-        entry =
-          PlaceEntryWithPlace(
-            entry =
-              PlaceEntryEntity(
-                placeListId = "list",
-                placeId = place.id,
-                status = PlaceStatus.VISITED,
-                foodRating = Rating.LIFE_CHANGING,
-                serviceRating = Rating.BAD,
-                revisitIntent = RevisitIntent.WAIT,
-                note = "Servers are rude, food was incredible.",
-                createdAt = 0,
-                updatedAt = 0,
-              ),
-            place = place,
-          ),
-        onStatusChange = {},
-        onFoodRatingChange = {},
-        onServiceRatingChange = {},
-        onRevisitIntentChange = {},
-        onNoteChange = {},
-      )
+      ForkloreTheme {
+        PlaceDetail(
+          entry =
+            PlaceEntryWithPlace(
+              entry =
+                PlaceEntryEntity(
+                  placeListId = "list",
+                  placeId = place.id,
+                  status = PlaceStatus.VISITED,
+                  foodRating = Rating.LIFE_CHANGING,
+                  serviceRating = Rating.BAD,
+                  revisitIntent = RevisitIntent.WAIT,
+                  note = "Servers are rude, food was incredible.",
+                  createdAt = 0,
+                  updatedAt = 0,
+                ),
+              place = place,
+            ),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+        )
+      }
     }
 
     compose.onNodeWithText("Hotel Brannock · Kansas").assertExists()
@@ -101,14 +106,16 @@ class PlaceDetailScreenTest {
   fun editingTheNote_reportsEveryKeystroke_withNoEditMode() {
     var note = ""
     compose.setContent {
-      PlaceDetail(
-        entry = entry("Halberd"),
-        onStatusChange = {},
-        onFoodRatingChange = {},
-        onServiceRatingChange = {},
-        onRevisitIntentChange = {},
-        onNoteChange = { note = it },
-      )
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = { note = it },
+        )
+      }
     }
 
     compose.onNode(hasSetTextAction()).performTextInput("Great pasta")
@@ -121,14 +128,16 @@ class PlaceDetailScreenTest {
     var foodRating: Rating? = null
     var serviceRating: Rating? = null
     compose.setContent {
-      PlaceDetail(
-        entry = entry("Halberd"),
-        onStatusChange = {},
-        onFoodRatingChange = { foodRating = it },
-        onServiceRatingChange = { serviceRating = it },
-        onRevisitIntentChange = {},
-        onNoteChange = {},
-      )
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = { foodRating = it },
+          onServiceRatingChange = { serviceRating = it },
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+        )
+      }
     }
 
     compose.onNode(hasText("Life-changing") and hasAnyAncestor(hasTestTag("food"))).performClick()

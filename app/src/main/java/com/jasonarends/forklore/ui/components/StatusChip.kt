@@ -1,19 +1,12 @@
 package com.jasonarends.forklore.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SelectableChipColors
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.data.db.DishStatus
@@ -38,7 +31,8 @@ val DishStatus.label: String
 
 /**
  * How a status reads at a glance. [Warning] is an instruction to the future ("don't order this"),
- * so it must never look like a faded version of [Pending].
+ * so it must never look like a faded version of [Pending] — it gets the rubber-stamp treatment
+ * ([LedgerStamp]), not just a different chip color.
  */
 internal enum class StatusTone {
   Pending,
@@ -64,12 +58,12 @@ internal val DishStatus.tone: StatusTone
 
 @Composable
 fun PlaceStatusChip(status: PlaceStatus, modifier: Modifier = Modifier) {
-  StatusChip(status.label, status.tone, modifier)
+  StatusBadge(status.label, status.tone, modifier)
 }
 
 @Composable
 fun DishStatusChip(status: DishStatus, modifier: Modifier = Modifier) {
-  StatusChip(status.label, status.tone, modifier)
+  StatusBadge(status.label, status.tone, modifier)
 }
 
 @Composable
@@ -84,7 +78,6 @@ fun PlaceStatusPicker(
     onSelect = onStatusChange,
     label = { it.label },
     modifier = modifier,
-    colors = { toneChipColors(it.tone) },
   )
 }
 
@@ -100,45 +93,35 @@ fun DishStatusPicker(
     onSelect = onStatusChange,
     label = { it.label },
     modifier = modifier,
-    colors = { toneChipColors(it.tone) },
   )
 }
 
+/**
+ * The committed, read-only status badge — [StatusTone.Warning] is a stamp, the others are plain
+ * chips (pending outlined with a bookmark, done filled with a check).
+ */
 @Composable
-private fun StatusChip(label: String, tone: StatusTone, modifier: Modifier) {
-  val colors = MaterialTheme.colorScheme
-  // Pending is outlined and Warning is filled, so they differ in shape as well as colour and stay
-  // distinguishable to someone who can't tell the colours apart.
-  val (container, content) =
-    when (tone) {
-      StatusTone.Pending -> Color.Transparent to colors.onSurfaceVariant
-      StatusTone.Done -> colors.secondaryContainer to colors.onSecondaryContainer
-      StatusTone.Warning -> colors.errorContainer to colors.onErrorContainer
-    }
-  Surface(
-    modifier = modifier,
-    shape = MaterialTheme.shapes.small,
-    color = container,
-    contentColor = content,
-    border = if (tone == StatusTone.Pending) BorderStroke(1.dp, colors.outline) else null,
-  ) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.labelLarge,
-      fontWeight = if (tone == StatusTone.Warning) FontWeight.Bold else null,
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-    )
+private fun StatusBadge(label: String, tone: StatusTone, modifier: Modifier) {
+  when (tone) {
+    StatusTone.Warning -> LedgerStamp(label, modifier)
+    StatusTone.Pending ->
+      LedgerChip(
+        label,
+        selected = false,
+        onClick = null,
+        modifier = modifier,
+        icon = LedgerGlyph.Bookmark,
+      )
+    StatusTone.Done ->
+      LedgerChip(
+        label,
+        selected = true,
+        onClick = null,
+        modifier = modifier,
+        icon = LedgerGlyph.Check,
+      )
   }
 }
-
-@Composable
-private fun toneChipColors(tone: StatusTone): SelectableChipColors =
-  if (tone == StatusTone.Warning)
-    FilterChipDefaults.filterChipColors(
-      selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
-      selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer,
-    )
-  else FilterChipDefaults.filterChipColors()
 
 @PreviewLightDark
 @Composable

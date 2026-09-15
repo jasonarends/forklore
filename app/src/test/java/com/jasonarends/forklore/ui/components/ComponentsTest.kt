@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
+import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -29,7 +30,9 @@ class ComponentsTest {
   @Test
   fun tappingARatingSelectsIt() {
     var rating: Rating? by mutableStateOf(null)
-    compose.setContent { RatingPicker(rating = rating, onRatingChange = { rating = it }) }
+    compose.setContent {
+      ForkloreTheme { RatingPicker(rating = rating, onRatingChange = { rating = it }) }
+    }
 
     compose.onNodeWithText("Life-changing").performClick()
 
@@ -41,7 +44,9 @@ class ComponentsTest {
   @Test
   fun tappingTheSelectedRatingClearsIt() {
     var rating: Rating? by mutableStateOf(Rating.GOOD)
-    compose.setContent { RatingPicker(rating = rating, onRatingChange = { rating = it }) }
+    compose.setContent {
+      ForkloreTheme { RatingPicker(rating = rating, onRatingChange = { rating = it }) }
+    }
 
     compose.onNodeWithText("Good").performClick()
 
@@ -67,7 +72,9 @@ class ComponentsTest {
   @Test
   fun dishStatusPickerReportsNeverAgain() {
     var status by mutableStateOf(DishStatus.WANT)
-    compose.setContent { DishStatusPicker(status = status, onStatusChange = { status = it }) }
+    compose.setContent {
+      ForkloreTheme { DishStatusPicker(status = status, onStatusChange = { status = it }) }
+    }
 
     compose.onNodeWithText("Never again").performClick()
 
@@ -80,14 +87,16 @@ class ComponentsTest {
     val note = "Skip the bread.\nAsk for the sauce on the side.\n".repeat(200)
     var saved = ""
     compose.setContent {
-      var value by remember { mutableStateOf("") }
-      NoteField(
-        value = value,
-        onValueChange = {
-          value = it
-          saved = it
-        },
-      )
+      ForkloreTheme {
+        var value by remember { mutableStateOf("") }
+        NoteField(
+          value = value,
+          onValueChange = {
+            value = it
+            saved = it
+          },
+        )
+      }
     }
 
     compose.onNode(hasSetTextAction()).performTextInput(note)

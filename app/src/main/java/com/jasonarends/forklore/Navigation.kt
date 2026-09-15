@@ -1,10 +1,8 @@
 package com.jasonarends.forklore
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
@@ -41,23 +39,29 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
             onAddPlace = { backStack.add(AddPlace) },
             onPlaceClick = { entryId -> backStack.add(PlaceDetail(entryId)) },
             onPeopleClick = { backStack.add(People) },
-            modifier = Modifier.safeDrawingPadding().padding(16.dp),
+            // Every screen now owns its own Scaffold + LedgerTopBar, which needs to render
+            // edge-to-edge (paper background, full-width rule) rather than inset by a blanket
+            // margin — LedgerTopBar handles the status-bar inset itself.
+            modifier = Modifier.fillMaxSize(),
           )
         }
         entry<AddPlace> {
           AddPlaceScreen(
             onSaved = { backStack.removeLastOrNull() },
             onCancel = { backStack.removeLastOrNull() },
-            modifier = Modifier.safeDrawingPadding().padding(16.dp),
+            modifier = Modifier.fillMaxSize(),
           )
         }
         entry<PlaceDetail> { key ->
           PlaceDetailScreen(
             placeEntryId = key.placeEntryId,
-            modifier = Modifier.safeDrawingPadding().padding(16.dp),
+            onBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.fillMaxSize(),
           )
         }
-        entry<People> { PeopleScreen(modifier = Modifier.safeDrawingPadding().padding(16.dp)) }
+        entry<People> {
+          PeopleScreen(onBack = { backStack.removeLastOrNull() }, modifier = Modifier.fillMaxSize())
+        }
       },
   )
 }
