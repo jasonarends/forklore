@@ -65,7 +65,7 @@ internal fun VisitsSection(
   onSaveVisit: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(modifier = modifier.fillMaxWidth().padding(bottom = 20.dp)) {
+  Column(modifier = modifier.fillMaxWidth()) {
     if (draft == null) {
       if (visits.isEmpty()) {
         EmptyState("No visits yet.")
