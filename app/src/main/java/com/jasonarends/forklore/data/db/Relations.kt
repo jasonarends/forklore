@@ -14,14 +14,18 @@ data class PlaceEntryWithPlace(
   @Relation(parentColumn = "placeId", entityColumn = "id") val place: PlaceEntity,
 )
 
-/** A visit with everyone who was there, in one query rather than 1 + N. */
+/**
+ * A visit with everyone who was there, in one query rather than 1 + N. Joins through
+ * [ActiveVisitAttendee], not [VisitAttendeeEntity] directly — see that view's KDoc for why a
+ * removed attendee must not still show up here.
+ */
 data class VisitWithAttendees(
   @Embedded val visit: VisitEntity,
   @Relation(
     parentColumn = "id",
     entityColumn = "id",
     associateBy =
-      Junction(VisitAttendeeEntity::class, parentColumn = "visitId", entityColumn = "personId"),
+      Junction(ActiveVisitAttendee::class, parentColumn = "visitId", entityColumn = "personId"),
   )
   val attendees: List<PersonEntity>,
 )

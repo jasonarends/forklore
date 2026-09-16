@@ -63,6 +63,7 @@ fun PlaceDetailScreen(
   modifier: Modifier = Modifier,
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
   dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
+  visitsViewModel: VisitsViewModel = viewModel(factory = VisitsViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
@@ -95,6 +96,8 @@ fun PlaceDetailScreen(
         val dishesState by dishesViewModel.uiState.collectAsStateWithLifecycle()
         val dishQuery by dishesViewModel.query.collectAsStateWithLifecycle()
         val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
+        val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
+        val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
           onStatusChange = viewModel::updateStatus,
@@ -102,6 +105,34 @@ fun PlaceDetailScreen(
           onServiceRatingChange = viewModel::updateServiceRating,
           onRevisitIntentChange = viewModel::updateRevisitIntent,
           onNoteChange = viewModel::updateNote,
+          visitsSection = {
+            when (val visitsCurrent = visitsState) {
+              VisitsUiState.Loading -> Unit
+              is VisitsUiState.Error ->
+                Text(
+                  "Couldn't load visits: ${visitsCurrent.throwable.message}",
+                  color = ForkloreTheme.colors.stamp,
+                )
+              is VisitsUiState.Success ->
+                VisitsSection(
+                  visits = visitsCurrent.visits,
+                  people = visitsCurrent.people,
+                  draft = visitDraft,
+                  onStartAdd = visitsViewModel::startAdd,
+                  onStartEdit = visitsViewModel::startEdit,
+                  onCancelDraft = visitsViewModel::cancelDraft,
+                  onPrecisionChange = visitsViewModel::onPrecisionChange,
+                  onYearChange = visitsViewModel::onYearChange,
+                  onMonthChange = visitsViewModel::onMonthChange,
+                  onDayChange = visitsViewModel::onDayChange,
+                  onMealChange = visitsViewModel::onMealChange,
+                  onNoteChange = visitsViewModel::onNoteChange,
+                  onAttendeesChange = visitsViewModel::onAttendeesChange,
+                  onCreatePerson = visitsViewModel::onCreatePerson,
+                  onSaveVisit = visitsViewModel::save,
+                )
+            }
+          },
           dishesSection = {
             DishesSection(
               state = dishesState,
@@ -136,6 +167,11 @@ internal fun PlaceDetail(
   onServiceRatingChange: (Rating?) -> Unit,
   onRevisitIntentChange: (RevisitIntent?) -> Unit,
   onNoteChange: (String) -> Unit,
+  // Slots rather than Visit-/Dish-shaped parameters: PlaceDetail stays ignorant of what a Visit
+  // or a Dish is, and either issue's follow-ups (#7, #8) extend inside their own section's
+  // content rather than growing this composable's parameter list. Required, not defaulted, so a
+  // production call site can't silently forget one — see DishesSection's own history for why.
+  visitsSection: @Composable () -> Unit,
   dishesSection: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -187,12 +223,15 @@ internal fun PlaceDetail(
     SectionHeader("Would we go back?")
     RevisitIntentPicker(intent = entry.entry.revisitIntent, onIntentChange = onRevisitIntentChange)
 
+    SectionHeader("Visits")
+    visitsSection()
+
     SectionHeader("Dishes")
     dishesSection()
 
     // No SectionHeader here: NoteField already carries its own "Note" label, and a second one
-    // above it would just be the same word twice. testTag disambiguates it from the dish fields
-    // above, which are also text inputs on this same screen.
+    // above it would just be the same word twice. testTag disambiguates it from the visit/dish
+    // fields above, which are also text inputs on this same screen.
     NoteField(
       value = entry.entry.note,
       onValueChange = onNoteChange,
@@ -427,6 +466,7 @@ private fun PlaceDetailPopulatedPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
+        visitsSection = {},
         dishesSection = {
           DishesSection(
             state =
@@ -489,6 +529,7 @@ private fun PlaceDetailEmptyPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
+        visitsSection = {},
         dishesSection = {
           DishesSection(
             state = DishesUiState.Success(emptyList()),

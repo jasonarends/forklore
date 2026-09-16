@@ -41,6 +41,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = {},
+          visitsSection = {},
           dishesSection = {},
         )
       }
@@ -87,6 +88,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = {},
+          visitsSection = {},
           dishesSection = {},
         )
       }
@@ -120,6 +122,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = { note = it },
+          visitsSection = {},
           dishesSection = {},
         )
       }
@@ -151,6 +154,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = { note = it },
+          visitsSection = {},
           dishesSection = {
             DishesSection(
               state = DishesUiState.Success(listOf(dish("Barrel Potatoes"))),
@@ -185,6 +189,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = { serviceRating = it },
           onRevisitIntentChange = {},
           onNoteChange = {},
+          visitsSection = {},
           dishesSection = {},
         )
       }

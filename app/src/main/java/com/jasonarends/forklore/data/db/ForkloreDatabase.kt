@@ -20,7 +20,8 @@ import androidx.room.TypeConverters
       DishInterestEntity::class,
       DishOpinionEntity::class,
     ],
-  version = 2,
+  views = [ActiveVisitAttendee::class],
+  version = 3,
   exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -46,7 +47,7 @@ abstract class ForkloreDatabase : RoomDatabase() {
       Room.databaseBuilder(context, ForkloreDatabase::class.java, "forklore.db")
         // No fallbackToDestructiveMigration: this database is the user's own writing and
         // there is no server copy to restore from. A missing migration must fail loudly.
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
   }
 }

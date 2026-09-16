@@ -105,6 +105,19 @@ interface VisitDao {
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun addAttendee(attendee: VisitAttendeeEntity)
 
+  @Update suspend fun updateAttendee(attendee: VisitAttendeeEntity)
+
+  /**
+   * Includes soft-deleted rows: [VisitRepository.setAttendees] partitions this single query into
+   * "still here" and "tombstoned, maybe resurrectable" rather than one query per candidate
+   * attendee. Resurrecting a tombstoned row rather than inserting a fresh one is the same
+   * tombstone-aware dance as [PersonDao.byNormalizedNameIncludingDeleted] — the unique index on
+   * (visitId, personId) doesn't care that the old row is deleted, only that the pair already
+   * exists.
+   */
+  @Query("SELECT * FROM visit_attendees WHERE visitId = :visitId")
+  suspend fun attendeesForVisitIncludingDeleted(visitId: String): List<VisitAttendeeEntity>
+
   @Update suspend fun update(visit: VisitEntity)
 
   /**

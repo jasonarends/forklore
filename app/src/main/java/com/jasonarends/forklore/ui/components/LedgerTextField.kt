@@ -7,6 +7,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
 
@@ -25,6 +26,7 @@ fun LedgerTextField(
   label: String,
   modifier: Modifier = Modifier,
   capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
+  keyboardType: KeyboardType = KeyboardType.Text,
 ) {
   val colors = ForkloreTheme.colors
   TextField(
@@ -34,7 +36,7 @@ fun LedgerTextField(
     label = { UppercaseLabel(text = label, style = ForkloreType.fieldLabel) },
     textStyle = ForkloreType.fieldInput,
     singleLine = true,
-    keyboardOptions = KeyboardOptions(capitalization = capitalization),
+    keyboardOptions = KeyboardOptions(capitalization = capitalization, keyboardType = keyboardType),
     colors =
       TextFieldDefaults.colors(
         focusedContainerColor = colors.card,
