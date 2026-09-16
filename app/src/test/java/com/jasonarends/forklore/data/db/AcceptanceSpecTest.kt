@@ -348,7 +348,7 @@ class AcceptanceSpecTest {
 
     updateEntry(entryId) { it.copy(note = "Servers are rude\nSERVICE HORRIBLE") }
 
-    assertTrue(db.placeEntryDao().byId(entryId)!!.note.contains("\n"))
+    assertEquals("Servers are rude\nSERVICE HORRIBLE", db.placeEntryDao().byId(entryId)!!.note)
   }
 
   // ---- 15. A person is deduped by name, however it's spelled --------------------------
