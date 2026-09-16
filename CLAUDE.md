@@ -156,6 +156,32 @@ Annotation processing uses KSP, never kapt.
   reaches for a ViewModel should be the screen-level one only.
 - No comments that restate the code. Comment *why*, and only when it isn't obvious.
 
+## Before merging a PR
+
+The author's own session is the worst judge of its own work — not through carelessness, but
+because everything in the PR looked reasonable while it was being written. These checks are
+cheap and catch what review misses.
+
+- **Verify the claims against the branch, not the description.** A PR body says what the
+  author believed. `git show "${BRANCH}:path/to/File.kt"` says what is actually there. Spot-check
+  the two or three claims that matter most — the schema really changed, the column is really
+  gone, the test really asserts what its name says.
+- **Check CI passed on the exact head SHA.** A green run on an earlier commit of the same
+  branch proves nothing about the tip that is about to merge.
+- **Open any committed binary and look at it.** A screenshot from a real device shows that
+  device's data — real names, real addresses — not the fixture data everyone assumes. This
+  repo is public. Prefer not committing captures at all: they are evidence for one review,
+  they go stale the moment the UI changes, and nothing diffs against them later.
+- **Check conflict resolutions for silent loss.** The easy failure is a resolution that drops
+  a test while the build stays green. Compare test names across both branches and the merge
+  result, not just the counts.
+- **Build the merged result, not the branches.** `./gradlew assembleDebug test
+  assembleDebugAndroidTest spotlessCheck lint` after merging. A clean merge of two clean
+  branches is not a clean build — each branch only ever saw its own changes.
+- **Deviations get stated, not applied quietly.** If the work departs from issue #11's plan or
+  a spec recorded on an issue, say so in the PR with the reasoning. Changing
+  `AcceptanceSpecTest` is always a deviation: it is the contract.
+
 ## Commands
 
 ```sh
