@@ -105,6 +105,19 @@ interface VisitDao {
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun addAttendee(attendee: VisitAttendeeEntity)
 
+  @Update suspend fun updateAttendee(attendee: VisitAttendeeEntity)
+
+  /**
+   * Includes soft-deleted rows: [VisitRepository.setAttendees] partitions this single query into
+   * "still here" and "tombstoned, maybe resurrectable" rather than one query per candidate
+   * attendee. Resurrecting a tombstoned row rather than inserting a fresh one is the same
+   * tombstone-aware dance as [PersonDao.byNormalizedNameIncludingDeleted] — the unique index on
+   * (visitId, personId) doesn't care that the old row is deleted, only that the pair already
+   * exists.
+   */
+  @Query("SELECT * FROM visit_attendees WHERE visitId = :visitId")
+  suspend fun attendeesForVisitIncludingDeleted(visitId: String): List<VisitAttendeeEntity>
+
   @Update suspend fun update(visit: VisitEntity)
 
   /**
@@ -154,6 +167,30 @@ interface DishDao {
       "AND (d.normalizedName = :normalized OR a.normalized = :normalized) LIMIT 1"
   )
   suspend fun findByAnyName(placeEntryId: String, normalized: String): DishEntity?
+
+  /**
+   * Atomic find-then-insert: Room serializes `@Transaction` suspend functions on its single write
+   * connection, so two concurrent callers (e.g. a double-tapped "Add") can no longer both observe
+   * [findByAnyName] as null and both insert — the second sees the first's row and returns it
+   * instead of racing [insert] into the unique index. Takes the whole [dish] rather than its
+   * `placeEntryId`/`normalizedName` as separate parameters, so nothing outside this function can
+   * pass a mismatched pair and silently defeat the dedupe.
+   */
+  @Transaction
+  suspend fun findOrInsert(dish: DishEntity): DishEntity {
+    findByAnyName(dish.placeEntryId, dish.normalizedName)?.let {
+      return it
+    }
+    insert(dish)
+    return dish
+  }
+
+  /** Atomic counterpart to [findOrInsert] for aliases — same race, same fix. */
+  @Transaction
+  suspend fun findOrInsertAlias(placeEntryId: String, alias: DishAliasEntity) {
+    if (findByAnyName(placeEntryId, alias.normalized) != null) return
+    insertAlias(alias)
+  }
 }
 
 @Dao

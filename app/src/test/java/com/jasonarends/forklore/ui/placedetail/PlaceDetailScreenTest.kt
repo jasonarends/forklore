@@ -6,9 +6,13 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import com.jasonarends.forklore.data.db.DishAliasEntity
+import com.jasonarends.forklore.data.db.DishEntity
+import com.jasonarends.forklore.data.db.DishWithAliases
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
@@ -37,6 +41,8 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = {},
+          visitsSection = {},
+          dishesSection = {},
         )
       }
     }
@@ -82,6 +88,8 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = {},
+          visitsSection = {},
+          dishesSection = {},
         )
       }
     }
@@ -114,11 +122,56 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = { note = it },
+          visitsSection = {},
+          dishesSection = {},
         )
       }
     }
 
-    compose.onNode(hasSetTextAction()).performTextInput("Great pasta")
+    // testTag disambiguates NoteField from other text inputs the Dishes section can add.
+    compose
+      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
+      .performTextInput("Great pasta")
+
+    assertEquals("Great pasta", note)
+  }
+
+  /**
+   * Unlike the other tests here, this renders a real (non-empty) `dishesSection` — the "Add a dish"
+   * field is also a text input, so this is what actually proves the place-note testTag matcher
+   * above does real work rather than passing only because the tree happens to have one text field
+   * in it.
+   */
+  @Test
+  fun editingTheNote_stillWorks_whenARealDishesSectionAddsAnotherTextField() {
+    var note = ""
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = { note = it },
+          visitsSection = {},
+          dishesSection = {
+            DishesSection(
+              state = DishesUiState.Success(listOf(dish("Barrel Potatoes"))),
+              query = "",
+              suggestions = emptyList(),
+              onQueryChange = {},
+              onAddDish = {},
+              onAddAlias = { _, _ -> },
+            )
+          },
+        )
+      }
+    }
+
+    compose
+      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
+      .performTextInput("Great pasta")
 
     assertEquals("Great pasta", note)
   }
@@ -136,6 +189,8 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = { serviceRating = it },
           onRevisitIntentChange = {},
           onNoteChange = {},
+          visitsSection = {},
+          dishesSection = {},
         )
       }
     }
@@ -144,6 +199,119 @@ class PlaceDetailScreenTest {
 
     assertEquals(Rating.LIFE_CHANGING, foodRating)
     assertEquals(null, serviceRating)
+  }
+
+  @Test
+  fun dishesRecordedAtThisEntry_areListedWithTheirAliases() {
+    compose.setContent {
+      ForkloreTheme {
+        DishesSection(
+          state =
+            DishesUiState.Success(
+              listOf(dish("Barrel Potatoes", aliases = listOf("potatoe barrels")))
+            ),
+          query = "",
+          suggestions = emptyList(),
+          onQueryChange = {},
+          onAddDish = {},
+          onAddAlias = { _, _ -> },
+        )
+      }
+    }
+
+    compose.onNodeWithText("Barrel Potatoes").assertExists()
+    compose.onNodeWithText("also: potatoe barrels").assertExists()
+  }
+
+  @Test
+  fun typingADishName_andPressingAdd_submitsIt() {
+    var added: String? = null
+    compose.setContent {
+      ForkloreTheme {
+        DishesSection(
+          state = DishesUiState.Success(emptyList()),
+          query = "Burnt Ends",
+          suggestions = emptyList(),
+          onQueryChange = {},
+          onAddDish = { added = it },
+          onAddAlias = { _, _ -> },
+        )
+      }
+    }
+
+    compose.onNodeWithText("Add").performClick()
+
+    assertEquals("Burnt Ends", added)
+  }
+
+  /**
+   * Issue #6's "done when": typing a spelling already taught to an existing dish (via an alias)
+   * offers that dish as a suggestion, and picking it submits the same name a fresh lookup would
+   * resolve back to the existing row — never a hand-typed duplicate.
+   */
+  @Test
+  fun typingAKnownAlias_offersTheExistingDishAsASuggestion_thatSubmitsIt() {
+    var added: String? = null
+    val existing = dish("Barrel Potatoes", aliases = listOf("barrel tots"))
+    compose.setContent {
+      ForkloreTheme {
+        DishesSection(
+          state = DishesUiState.Success(listOf(existing)),
+          query = "barrel tots",
+          suggestions = listOf(existing),
+          onQueryChange = {},
+          onAddDish = { added = it },
+          onAddAlias = { _, _ -> },
+        )
+      }
+    }
+
+    compose.onNodeWithTag("dish-suggestion-${existing.dish.id}").performClick()
+
+    assertEquals("Barrel Potatoes", added)
+  }
+
+  @Test
+  fun aFailedDishesLoad_showsTheFailure_notAnEmptyList() {
+    compose.setContent {
+      ForkloreTheme {
+        DishesSection(
+          state = DishesUiState.Error(RuntimeException("disk full")),
+          query = "",
+          suggestions = emptyList(),
+          onQueryChange = {},
+          onAddDish = {},
+          onAddAlias = { _, _ -> },
+        )
+      }
+    }
+
+    compose.onNodeWithText("Couldn't load dishes: disk full").assertExists()
+    compose.onNodeWithText("No dishes yet.").assertDoesNotExist()
+  }
+
+  private fun dish(name: String, aliases: List<String> = emptyList()): DishWithAliases {
+    val entity =
+      DishEntity(
+        placeEntryId = "entry",
+        canonicalName = name,
+        normalizedName = name.lowercase(),
+        createdAt = 0,
+        updatedAt = 0,
+      )
+    return DishWithAliases(
+      dish = entity,
+      aliases =
+        aliases.map {
+          DishAliasEntity(
+            dishId = entity.id,
+            alias = it,
+            normalized = it.lowercase(),
+            createdAt = 0,
+            updatedAt = 0,
+          )
+        },
+    )
   }
 
   private fun entry(name: String, status: PlaceStatus = PlaceStatus.WANT): PlaceEntryWithPlace {

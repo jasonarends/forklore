@@ -118,6 +118,52 @@ class MigrationTest {
     }
   }
 
+  /** Covers issue #5: the `active_visit_attendees` view, added purely additively. */
+  @Test
+  fun migrate2To3_addsTheActiveVisitAttendeesView() {
+    helper.createDatabase(TEST_DB, 2).use { db ->
+      db.execSQL(
+        "INSERT INTO place_lists (id, name, createdAt, updatedAt) VALUES ('list-1', 'Ours', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO places (id, name, createdAt, updatedAt) VALUES ('place-1', 'Halberd', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO place_entries (id, placeListId, placeId, status, note, createdAt, updatedAt) " +
+          "VALUES ('entry-1', 'list-1', 'place-1', 'WANT', '', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO visits (id, placeEntryId, datePrecision, note, createdAt, updatedAt) " +
+          "VALUES ('visit-1', 'entry-1', 'UNKNOWN', '', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO people (id, name, normalizedName, isHouseholdMember, note, createdAt, updatedAt) " +
+          "VALUES ('ana', 'Ana', 'ana', 1, '', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO people (id, name, normalizedName, isHouseholdMember, note, createdAt, updatedAt) " +
+          "VALUES ('bo', 'Bo', 'bo', 1, '', $now, $now)"
+      )
+      // Ana attended and was later removed; Bo still attends. The view must carry Bo only.
+      db.execSQL(
+        "INSERT INTO visit_attendees (id, visitId, personId, createdAt, updatedAt, deletedAt) " +
+          "VALUES ('link-ana', 'visit-1', 'ana', $now, $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO visit_attendees (id, visitId, personId, createdAt, updatedAt) " +
+          "VALUES ('link-bo', 'visit-1', 'bo', $now, $now)"
+      )
+    }
+
+    val db = helper.runMigrationsAndValidate(TEST_DB, 3, true, MIGRATION_2_3)
+
+    db.query("SELECT personId FROM active_visit_attendees WHERE visitId = 'visit-1'").use { cursor
+      ->
+      val personIds = generateSequence { if (cursor.moveToNext()) cursor.getString(0) else null }
+      assertEquals(setOf("bo"), personIds.toSet())
+    }
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

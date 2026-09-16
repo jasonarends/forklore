@@ -45,39 +45,38 @@ class DishRepository(
   /**
    * Returns the existing dish if this place entry already has one under any recorded spelling,
    * otherwise creates it. Callers should always come through here rather than inserting: it is what
-   * keeps "barrel tots" and "potatoe barrels" one row.
+   * keeps "barrel tots" and "potatoe barrels" one row. Goes through [DishDao.findOrInsert] (a
+   * single `@Transaction`) rather than a separate find then insert, so two concurrent calls for the
+   * same name can't both see no match and both insert.
    */
   suspend fun findOrCreateDish(placeEntryId: String, name: String): String {
-    val normalized = normalizeDishName(name)
-    dishDao.findByAnyName(placeEntryId, normalized)?.let {
-      return it.id
-    }
     val now = clock.nowMillis()
     val dish =
-      DishEntity(
-        placeEntryId = placeEntryId,
-        canonicalName = name.trim(),
-        normalizedName = normalized,
-        createdAt = now,
-        updatedAt = now,
+      dishDao.findOrInsert(
+        DishEntity(
+          placeEntryId = placeEntryId,
+          canonicalName = name.trim(),
+          normalizedName = normalizeDishName(name),
+          createdAt = now,
+          updatedAt = now,
+        )
       )
-    dishDao.insert(dish)
     return dish.id
   }
 
-  /** No-op when the spelling already resolves to this dish. */
+  /** No-op when the spelling already resolves to this dish. See [findOrCreateDish] on the race. */
   suspend fun addAlias(dishId: String, placeEntryId: String, alias: String) {
-    val normalized = normalizeDishName(alias)
-    if (dishDao.findByAnyName(placeEntryId, normalized) != null) return
     val now = clock.nowMillis()
-    dishDao.insertAlias(
-      DishAliasEntity(
-        dishId = dishId,
-        alias = alias.trim(),
-        normalized = normalized,
-        createdAt = now,
-        updatedAt = now,
-      )
+    dishDao.findOrInsertAlias(
+      placeEntryId = placeEntryId,
+      alias =
+        DishAliasEntity(
+          dishId = dishId,
+          alias = alias.trim(),
+          normalized = normalizeDishName(alias),
+          createdAt = now,
+          updatedAt = now,
+        ),
     )
   }
 

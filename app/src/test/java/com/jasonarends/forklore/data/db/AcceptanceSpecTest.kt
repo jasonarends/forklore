@@ -113,6 +113,25 @@ class AcceptanceSpecTest {
     assertEquals(setOf("Ana", "Casey"), attendees.map { it.name }.toSet())
   }
 
+  @Test
+  fun aRemovedAttendee_stopsAppearingInVisitWithAttendees() = runTest {
+    val entry = placeEntry(place("Halberd"))
+    val visitId = visit(entry, epochDay = 20_619, precision = DatePrecision.DAY)
+    attend(visitId, ana)
+    attend(visitId, sam)
+
+    // Mirrors what VisitRepository.setAttendees does: stamp deletedAt, don't remove the row —
+    // the read path (the active_visit_attendees view VisitWithAttendees joins through) is what
+    // this test actually proves, not the write.
+    val samsRow =
+      db.visitDao().attendeesForVisitIncludingDeleted(visitId).single { it.personId == sam }
+    db.visitDao().updateAttendee(samsRow.copy(deletedAt = later, updatedAt = later))
+
+    val attendees = db.visitDao().observeForPlaceEntry(entry).first().single().attendees
+
+    assertEquals(listOf("Ana"), attendees.map { it.name })
+  }
+
   // ---- 3. One dish spelled three ways is still one dish -------------------------------
 
   @Test

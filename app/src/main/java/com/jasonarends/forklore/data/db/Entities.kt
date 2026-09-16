@@ -1,5 +1,6 @@
 package com.jasonarends.forklore.data.db
 
+import androidx.room.DatabaseView
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.ForeignKey.Companion.CASCADE
@@ -151,6 +152,19 @@ data class VisitAttendeeEntity(
   val updatedAt: Long,
   val deletedAt: Long? = null,
 )
+
+/**
+ * The non-deleted half of [VisitAttendeeEntity], for [VisitWithAttendees] to join through. A
+ * `@Relation`'s `Junction` can't carry a `WHERE` clause of its own, so without this view a removed
+ * attendee's tombstoned row would still join in — the read-side half of CLAUDE.md's "every read
+ * filters `deletedAt IS NULL`" would silently stop holding for this one table the moment a visit's
+ * attendee list changed on the same day #5 first started writing tombstones there.
+ */
+@DatabaseView(
+  viewName = "active_visit_attendees",
+  value = "SELECT id, visitId, personId FROM visit_attendees WHERE deletedAt IS NULL",
+)
+data class ActiveVisitAttendee(val id: String, val visitId: String, val personId: String)
 
 /**
  * A named menu item, scoped to one list's entry for a place. [normalizedName] is the match key and

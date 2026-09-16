@@ -1,7 +1,9 @@
 package com.jasonarends.forklore.ui.placedetail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,14 +15,24 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jasonarends.forklore.data.db.DishAliasEntity
+import com.jasonarends.forklore.data.db.DishEntity
+import com.jasonarends.forklore.data.db.DishWithAliases
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
@@ -28,8 +40,11 @@ import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.LedgerChip
 import com.jasonarends.forklore.ui.components.LedgerGlyph
 import com.jasonarends.forklore.ui.components.LedgerIcon
+import com.jasonarends.forklore.ui.components.LedgerPrimaryButton
+import com.jasonarends.forklore.ui.components.LedgerTextField
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.NoteField
 import com.jasonarends.forklore.ui.components.PlaceStatusPicker
@@ -47,6 +62,8 @@ fun PlaceDetailScreen(
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
+  dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
+  visitsViewModel: VisitsViewModel = viewModel(factory = VisitsViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
@@ -75,7 +92,12 @@ fun PlaceDetailScreen(
           "Couldn't load this place: ${current.throwable.message}",
           Modifier.padding(innerPadding),
         )
-      is PlaceDetailUiState.Success ->
+      is PlaceDetailUiState.Success -> {
+        val dishesState by dishesViewModel.uiState.collectAsStateWithLifecycle()
+        val dishQuery by dishesViewModel.query.collectAsStateWithLifecycle()
+        val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
+        val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
+        val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
           onStatusChange = viewModel::updateStatus,
@@ -83,8 +105,47 @@ fun PlaceDetailScreen(
           onServiceRatingChange = viewModel::updateServiceRating,
           onRevisitIntentChange = viewModel::updateRevisitIntent,
           onNoteChange = viewModel::updateNote,
+          visitsSection = {
+            when (val visitsCurrent = visitsState) {
+              VisitsUiState.Loading -> Unit
+              is VisitsUiState.Error ->
+                Text(
+                  "Couldn't load visits: ${visitsCurrent.throwable.message}",
+                  color = ForkloreTheme.colors.stamp,
+                )
+              is VisitsUiState.Success ->
+                VisitsSection(
+                  visits = visitsCurrent.visits,
+                  people = visitsCurrent.people,
+                  draft = visitDraft,
+                  onStartAdd = visitsViewModel::startAdd,
+                  onStartEdit = visitsViewModel::startEdit,
+                  onCancelDraft = visitsViewModel::cancelDraft,
+                  onPrecisionChange = visitsViewModel::onPrecisionChange,
+                  onYearChange = visitsViewModel::onYearChange,
+                  onMonthChange = visitsViewModel::onMonthChange,
+                  onDayChange = visitsViewModel::onDayChange,
+                  onMealChange = visitsViewModel::onMealChange,
+                  onNoteChange = visitsViewModel::onNoteChange,
+                  onAttendeesChange = visitsViewModel::onAttendeesChange,
+                  onCreatePerson = visitsViewModel::onCreatePerson,
+                  onSaveVisit = visitsViewModel::save,
+                )
+            }
+          },
+          dishesSection = {
+            DishesSection(
+              state = dishesState,
+              query = dishQuery,
+              suggestions = dishSuggestions,
+              onQueryChange = dishesViewModel::onQueryChange,
+              onAddDish = dishesViewModel::addDish,
+              onAddAlias = dishesViewModel::addAlias,
+            )
+          },
           modifier = Modifier.padding(innerPadding),
         )
+      }
     }
   }
 }
@@ -106,6 +167,12 @@ internal fun PlaceDetail(
   onServiceRatingChange: (Rating?) -> Unit,
   onRevisitIntentChange: (RevisitIntent?) -> Unit,
   onNoteChange: (String) -> Unit,
+  // Slots rather than Visit-/Dish-shaped parameters: PlaceDetail stays ignorant of what a Visit
+  // or a Dish is, and either issue's follow-ups (#7, #8) extend inside their own section's
+  // content rather than growing this composable's parameter list. Required, not defaulted, so a
+  // production call site can't silently forget one — see DishesSection's own history for why.
+  visitsSection: @Composable () -> Unit,
+  dishesSection: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -156,13 +223,186 @@ internal fun PlaceDetail(
     SectionHeader("Would we go back?")
     RevisitIntentPicker(intent = entry.entry.revisitIntent, onIntentChange = onRevisitIntentChange)
 
+    SectionHeader("Visits")
+    visitsSection()
+
+    SectionHeader("Dishes")
+    dishesSection()
+
     // No SectionHeader here: NoteField already carries its own "Note" label, and a second one
-    // above it would just be the same word twice.
+    // above it would just be the same word twice. testTag disambiguates it from the visit/dish
+    // fields above, which are also text inputs on this same screen.
     NoteField(
       value = entry.entry.note,
       onValueChange = onNoteChange,
-      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
+      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp).testTag("place-note"),
     )
+  }
+}
+
+/**
+ * Every dish recorded at this place entry, plus the field that adds one. `internal` (not `private`)
+ * so tests can exercise it directly rather than through the whole [PlaceDetail] column. [DishRow]'s
+ * name row leaves a trailing slot for issue #7's per-dish status chip, and space below it for
+ * issue #8's opinion cards — neither is wired in yet.
+ */
+@Composable
+internal fun DishesSection(
+  state: DishesUiState,
+  query: String,
+  suggestions: List<DishWithAliases>,
+  onQueryChange: (String) -> Unit,
+  onAddDish: (String) -> Unit,
+  onAddAlias: (dishId: String, alias: String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val colors = ForkloreTheme.colors
+  Column(modifier = modifier.fillMaxWidth()) {
+    when (state) {
+      DishesUiState.Loading -> Unit
+      is DishesUiState.Error ->
+        Text(
+          "Couldn't load dishes: ${state.throwable.message}",
+          style = ForkloreType.fieldInput,
+          color = colors.stamp,
+        )
+      is DishesUiState.Success -> {
+        if (state.dishes.isEmpty()) {
+          EmptyState("No dishes yet.")
+        } else {
+          state.dishes.forEach { dish ->
+            key(dish.dish.id) {
+              DishRow(
+                dish = dish,
+                onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
+                modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
+              )
+            }
+          }
+        }
+        // Only rendered in the Success branch: on Error the write would still land (it hits the
+        // database directly, not this composable's state), but the list never recovers to show
+        // it, so the user would submit into a field and see nothing happen. Loading has no
+        // suggestions to offer yet either way.
+        DishEntryField(
+          query = query,
+          suggestions = suggestions,
+          onQueryChange = onQueryChange,
+          onSubmit = onAddDish,
+          modifier = Modifier.padding(top = 8.dp),
+        )
+      }
+    }
+  }
+}
+
+/** One recorded dish, its aliases, and the affordance to add another spelling. */
+@Composable
+private fun DishRow(
+  dish: DishWithAliases,
+  onAddAlias: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val colors = ForkloreTheme.colors
+  Column(modifier = modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text(text = dish.dish.canonicalName, style = ForkloreType.dishName, color = colors.ink)
+    }
+    if (dish.aliases.isNotEmpty()) {
+      Text(
+        text = "also: " + dish.aliases.joinToString(", ") { it.alias },
+        style = ForkloreType.branchLabel,
+        color = colors.ink2,
+        modifier = Modifier.padding(top = 2.dp),
+      )
+    }
+    AliasEntry(onAdd = onAddAlias, modifier = Modifier.padding(top = 6.dp))
+  }
+}
+
+/** A collapsed "+ alternate spelling" link that expands into a field, mirroring [PersonPicker]. */
+@Composable
+private fun AliasEntry(onAdd: (String) -> Unit, modifier: Modifier = Modifier) {
+  var expanded by rememberSaveable { mutableStateOf(false) }
+  var text by rememberSaveable { mutableStateOf("") }
+  val colors = ForkloreTheme.colors
+  if (expanded) {
+    Row(
+      modifier = modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      LedgerTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = "Alternate spelling",
+        modifier = Modifier.weight(1f).testTag("alias-field"),
+      )
+      TextButton(
+        enabled = text.isNotBlank(),
+        onClick = {
+          onAdd(text.trim())
+          text = ""
+          expanded = false
+        },
+      ) {
+        Text("Add")
+      }
+    }
+  } else {
+    TextButton(onClick = { expanded = true }, modifier = modifier) {
+      Text("+ Alternate spelling", color = colors.ink2)
+    }
+  }
+}
+
+/**
+ * The "add a dish" field: typing offers matching [suggestions] as chips (see
+ * [DishesViewModel.suggestions]) so a dish already recorded under a different spelling is picked
+ * rather than re-typed into a duplicate; tapping one submits it exactly as [onSubmit] would. The
+ * button submits whatever was typed regardless — `DishRepository.findOrCreateDish` is what actually
+ * guards against a duplicate landing in Room; this field only makes the existing option visible.
+ */
+@Composable
+private fun DishEntryField(
+  query: String,
+  suggestions: List<DishWithAliases>,
+  onQueryChange: (String) -> Unit,
+  onSubmit: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(modifier = modifier.fillMaxWidth()) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      LedgerTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        label = "Add a dish",
+        capitalization = KeyboardCapitalization.Words,
+        modifier = Modifier.weight(1f).testTag("dish-query-field"),
+      )
+      LedgerPrimaryButton(
+        text = "Add",
+        onClick = { onSubmit(query) },
+        enabled = query.isNotBlank(),
+      )
+    }
+    if (suggestions.isNotEmpty()) {
+      FlowRow(
+        modifier = Modifier.padding(top = 6.dp).testTag("dish-suggestions"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        suggestions.forEach { suggestion ->
+          LedgerChip(
+            label = suggestion.dish.canonicalName,
+            selected = false,
+            onClick = { onSubmit(suggestion.dish.canonicalName) },
+            modifier = Modifier.testTag("dish-suggestion-${suggestion.dish.id}"),
+          )
+        }
+      }
+    }
   }
 }
 
@@ -226,6 +466,41 @@ private fun PlaceDetailPopulatedPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
+        visitsSection = {},
+        dishesSection = {
+          DishesSection(
+            state =
+              DishesUiState.Success(
+                listOf(
+                  DishWithAliases(
+                    dish =
+                      DishEntity(
+                        placeEntryId = "entry",
+                        canonicalName = "Barrel Potatoes",
+                        normalizedName = "barrel potatoes",
+                        createdAt = 0,
+                        updatedAt = 0,
+                      ),
+                    aliases =
+                      listOf(
+                        DishAliasEntity(
+                          dishId = "dish",
+                          alias = "potatoe barrels",
+                          normalized = "potatoe barrels",
+                          createdAt = 0,
+                          updatedAt = 0,
+                        )
+                      ),
+                  )
+                )
+              ),
+            query = "",
+            suggestions = emptyList(),
+            onQueryChange = {},
+            onAddDish = {},
+            onAddAlias = { _, _ -> },
+          )
+        },
       )
     }
   }
@@ -254,6 +529,17 @@ private fun PlaceDetailEmptyPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
+        visitsSection = {},
+        dishesSection = {
+          DishesSection(
+            state = DishesUiState.Success(emptyList()),
+            query = "",
+            suggestions = emptyList(),
+            onQueryChange = {},
+            onAddDish = {},
+            onAddAlias = { _, _ -> },
+          )
+        },
       )
     }
   }
