@@ -111,7 +111,7 @@ class DishRepositoryTest {
    */
   @Test
   fun findOrCreateDish_concurrentCallsForTheSameSpelling_createOnlyOneDish() = runTest {
-    coroutineScope {
+    val ids = coroutineScope {
       (1..8)
         .map {
           async(Dispatchers.IO) { repository.findOrCreateDish(placeEntryId, "Barrel Potatoes") }
@@ -119,6 +119,11 @@ class DishRepositoryTest {
         .awaitAll()
     }
 
+    // Every caller must agree on the same id, not just leave one row behind — findOrInsert
+    // returns the entity it was passed on the losing path too, so a return-value bug (e.g.
+    // switching insert to OnConflictStrategy.IGNORE) could hand a caller a phantom id while the
+    // row count alone would still read 1.
+    assertEquals(1, ids.toSet().size)
     assertEquals(1, db.dishDao().observeForPlaceEntry(placeEntryId).first().size)
   }
 

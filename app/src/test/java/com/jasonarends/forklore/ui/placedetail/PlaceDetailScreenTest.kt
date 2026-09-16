@@ -133,6 +133,45 @@ class PlaceDetailScreenTest {
     assertEquals("Great pasta", note)
   }
 
+  /**
+   * Unlike the other tests here, this renders a real (non-empty) `dishesSection` — the "Add a dish"
+   * field is also a text input, so this is what actually proves the place-note testTag matcher
+   * above does real work rather than passing only because the tree happens to have one text field
+   * in it.
+   */
+  @Test
+  fun editingTheNote_stillWorks_whenARealDishesSectionAddsAnotherTextField() {
+    var note = ""
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = { note = it },
+          dishesSection = {
+            DishesSection(
+              state = DishesUiState.Success(listOf(dish("Barrel Potatoes"))),
+              query = "",
+              suggestions = emptyList(),
+              onQueryChange = {},
+              onAddDish = {},
+              onAddAlias = { _, _ -> },
+            )
+          },
+        )
+      }
+    }
+
+    compose
+      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
+      .performTextInput("Great pasta")
+
+    assertEquals("Great pasta", note)
+  }
+
   @Test
   fun pickingAFoodRating_reportsIt_andLeavesServiceAlone() {
     var foodRating: Rating? = null

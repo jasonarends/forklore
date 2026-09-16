@@ -50,36 +50,30 @@ class DishRepository(
    * same name can't both see no match and both insert.
    */
   suspend fun findOrCreateDish(placeEntryId: String, name: String): String {
-    val normalized = normalizeDishName(name)
     val now = clock.nowMillis()
     val dish =
       dishDao.findOrInsert(
-        placeEntryId = placeEntryId,
-        normalized = normalized,
-        dish =
-          DishEntity(
-            placeEntryId = placeEntryId,
-            canonicalName = name.trim(),
-            normalizedName = normalized,
-            createdAt = now,
-            updatedAt = now,
-          ),
+        DishEntity(
+          placeEntryId = placeEntryId,
+          canonicalName = name.trim(),
+          normalizedName = normalizeDishName(name),
+          createdAt = now,
+          updatedAt = now,
+        )
       )
     return dish.id
   }
 
   /** No-op when the spelling already resolves to this dish. See [findOrCreateDish] on the race. */
   suspend fun addAlias(dishId: String, placeEntryId: String, alias: String) {
-    val normalized = normalizeDishName(alias)
     val now = clock.nowMillis()
     dishDao.findOrInsertAlias(
       placeEntryId = placeEntryId,
-      normalized = normalized,
       alias =
         DishAliasEntity(
           dishId = dishId,
           alias = alias.trim(),
-          normalized = normalized,
+          normalized = normalizeDishName(alias),
           createdAt = now,
           updatedAt = now,
         ),

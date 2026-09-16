@@ -159,11 +159,13 @@ interface DishDao {
    * Atomic find-then-insert: Room serializes `@Transaction` suspend functions on its single write
    * connection, so two concurrent callers (e.g. a double-tapped "Add") can no longer both observe
    * [findByAnyName] as null and both insert — the second sees the first's row and returns it
-   * instead of racing [insert] into the unique index.
+   * instead of racing [insert] into the unique index. Takes the whole [dish] rather than its
+   * `placeEntryId`/`normalizedName` as separate parameters, so nothing outside this function can
+   * pass a mismatched pair and silently defeat the dedupe.
    */
   @Transaction
-  suspend fun findOrInsert(placeEntryId: String, normalized: String, dish: DishEntity): DishEntity {
-    findByAnyName(placeEntryId, normalized)?.let {
+  suspend fun findOrInsert(dish: DishEntity): DishEntity {
+    findByAnyName(dish.placeEntryId, dish.normalizedName)?.let {
       return it
     }
     insert(dish)
@@ -172,8 +174,8 @@ interface DishDao {
 
   /** Atomic counterpart to [findOrInsert] for aliases — same race, same fix. */
   @Transaction
-  suspend fun findOrInsertAlias(placeEntryId: String, normalized: String, alias: DishAliasEntity) {
-    if (findByAnyName(placeEntryId, normalized) != null) return
+  suspend fun findOrInsertAlias(placeEntryId: String, alias: DishAliasEntity) {
+    if (findByAnyName(placeEntryId, alias.normalized) != null) return
     insertAlias(alias)
   }
 }

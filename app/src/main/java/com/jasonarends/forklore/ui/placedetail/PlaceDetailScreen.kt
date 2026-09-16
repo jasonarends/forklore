@@ -241,9 +241,10 @@ internal fun DishesSection(
             }
           }
         }
-        // Only rendered once dishes have actually loaded: findOrCreateDish resolves against
-        // this place entry's existing dishes, so a field the user can submit into before that
-        // list is known (or after it's failed to load) would silently write nothing useful.
+        // Only rendered in the Success branch: on Error the write would still land (it hits the
+        // database directly, not this composable's state), but the list never recovers to show
+        // it, so the user would submit into a field and see nothing happen. Loading has no
+        // suggestions to offer yet either way.
         DishEntryField(
           query = query,
           suggestions = suggestions,
