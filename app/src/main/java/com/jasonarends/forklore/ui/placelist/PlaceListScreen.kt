@@ -35,6 +35,7 @@ import com.jasonarends.forklore.ui.components.LedgerOutlinedFullWidthButton
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.PlaceStatusChip
 import com.jasonarends.forklore.ui.components.RatingLabel
+import com.jasonarends.forklore.ui.components.UppercaseLabel
 import com.jasonarends.forklore.ui.theme.Caveat
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
@@ -153,8 +154,8 @@ internal fun PlaceList(
             // verdict, so the list row keeps the "Food:" label even though the mockup's inline
             // rating doesn't show one.
             entry.entry.foodRating?.let {
-              Text(
-                "Food:",
+              UppercaseLabel(
+                text = "Food:",
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.ink2,
               )

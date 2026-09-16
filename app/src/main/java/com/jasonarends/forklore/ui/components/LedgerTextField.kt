@@ -2,7 +2,6 @@ package com.jasonarends.forklore.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -32,7 +31,7 @@ fun LedgerTextField(
     value = value,
     onValueChange = onValueChange,
     modifier = modifier.fillMaxWidth(),
-    label = { Text(label, style = ForkloreType.fieldLabel) },
+    label = { UppercaseLabel(text = label, style = ForkloreType.fieldLabel) },
     textStyle = ForkloreType.fieldInput,
     singleLine = true,
     keyboardOptions = KeyboardOptions(capitalization = capitalization),

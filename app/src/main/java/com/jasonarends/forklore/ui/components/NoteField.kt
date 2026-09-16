@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -42,7 +41,7 @@ fun NoteField(
   val borderColor = if (warning) colors.stamp else colors.cardBorder
   val textColor = if (warning) colors.stamp else colors.ink
   Column(modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
-    Text(text = label, style = ForkloreType.fieldLabel, color = colors.ink2)
+    UppercaseLabel(text = label, style = ForkloreType.fieldLabel, color = colors.ink2)
     Surface(
       modifier =
         Modifier.fillMaxWidth().padding(top = 5.dp).hardShadow(2.dp, 3.dp, colors.cardShadow, 2.dp),
