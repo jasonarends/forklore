@@ -53,7 +53,7 @@ class VisitsViewModelTest {
         .setQueryExecutor { it.run() }
         .setTransactionExecutor { it.run() }
         .build()
-    visitRepository = VisitRepository(db.visitDao(), Clock { 0L })
+    visitRepository = VisitRepository(db, db.visitDao(), Clock { 0L })
     personRepository = PersonRepository(db.personDao(), Clock { 0L })
 
     val listId = "list"

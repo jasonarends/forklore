@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
@@ -185,39 +186,46 @@ private fun VisitForm(
             value = draft.month,
             onValueChange = onMonthChange,
             label = "Month",
+            keyboardType = KeyboardType.Number,
             modifier = Modifier.weight(1f).testTag("visit-date-month"),
           )
           LedgerTextField(
             value = draft.day,
             onValueChange = onDayChange,
             label = "Day",
+            keyboardType = KeyboardType.Number,
             modifier = Modifier.weight(1f).testTag("visit-date-day"),
           )
           LedgerTextField(
             value = draft.year,
             onValueChange = onYearChange,
             label = "Year",
+            keyboardType = KeyboardType.Number,
             modifier = Modifier.weight(1f).testTag("visit-date-year"),
           )
         }
-      DatePrecision.MONTH,
-      DatePrecision.YEAR ->
+      DatePrecision.MONTH ->
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          if (draft.precision == DatePrecision.MONTH) {
-            LedgerTextField(
-              value = draft.month,
-              onValueChange = onMonthChange,
-              label = "Month",
-              modifier = Modifier.weight(1f).testTag("visit-date-month"),
-            )
-          }
+          LedgerTextField(
+            value = draft.month,
+            onValueChange = onMonthChange,
+            label = "Month",
+            keyboardType = KeyboardType.Number,
+            modifier = Modifier.weight(1f).testTag("visit-date-month"),
+          )
           LedgerTextField(
             value = draft.year,
             onValueChange = onYearChange,
             label = "Year",
+            keyboardType = KeyboardType.Number,
             modifier = Modifier.weight(1f).testTag("visit-date-year"),
           )
         }
+      // DatePrecision.YEAR has no entry point in DatePrecisionPicker (see its KDoc) — a draft
+      // can only be in this state via VisitDraft.from on a row this UI never wrote, and rendering
+      // a year field here would look editable while no chip above shows it selected. Nothing to
+      // render until issue #5's YEAR support gets a picker entry, per that same KDoc.
+      DatePrecision.YEAR,
       DatePrecision.UNKNOWN -> Unit
     }
     UppercaseLabel(text = "Meal", style = ForkloreType.fieldLabel, color = colors.ink2)

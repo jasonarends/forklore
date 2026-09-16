@@ -1,5 +1,6 @@
 package com.jasonarends.forklore.ui.placedetail
 
+import android.database.sqlite.SQLiteException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -102,36 +103,41 @@ class VisitsViewModel(
   fun save() {
     val current = _draft.value ?: return
     if (current.saving) return
-    val resolution = current.resolveDate()
-    if (resolution is DateResolution.Invalid) {
-      _draft.update { it?.copy(error = "Enter a valid date, or choose \"No date\".") }
-      return
-    }
-    val epochDay = (resolution as DateResolution.Ready).epochDay
+    val epochDay =
+      current.resolveDate().getOrElse {
+        _draft.update { it?.copy(error = "Enter a valid date, or choose \"No date\".") }
+        return
+      }
     _draft.update { it?.copy(saving = true, error = null) }
     viewModelScope.launch {
-      val visitId = current.visitId
-      if (visitId == null) {
-        visitRepository.record(
-          placeEntryId = placeEntryId,
-          dateEpochDay = epochDay,
-          datePrecision = current.precision,
-          meal = current.meal,
-          note = current.note,
-          attendees = current.attendees.toList(),
-        )
-      } else {
-        visitRepository.update(visitId) { visit ->
-          visit.copy(
+      try {
+        val visitId = current.visitId
+        if (visitId == null) {
+          visitRepository.record(
+            placeEntryId = placeEntryId,
             dateEpochDay = epochDay,
             datePrecision = current.precision,
             meal = current.meal,
             note = current.note,
+            attendees = current.attendees.toList(),
           )
+        } else {
+          visitRepository.updateWithAttendees(visitId, current.attendees) { visit ->
+            visit.copy(
+              dateEpochDay = epochDay,
+              datePrecision = current.precision,
+              meal = current.meal,
+              note = current.note,
+            )
+          }
         }
-        visitRepository.setAttendees(visitId, current.attendees)
+        _draft.value = null
+      } catch (_: SQLiteException) {
+        // A write that fails (a full disk, a constraint violation) must not crash the app or
+        // leave Save stuck disabled forever — the person just needs to be able to try again. See
+        // AddPlaceViewModel.save() for the same shape.
+        _draft.update { it?.copy(saving = false, error = "Couldn't save this visit. Try again.") }
       }
-      _draft.value = null
     }
   }
 
@@ -174,23 +180,19 @@ data class VisitDraft(
 ) {
   /**
    * [DatePrecision.UNKNOWN] always resolves to no date — no fields needed. The other precisions
-   * resolve to [DateResolution.Invalid] on anything from a still-in-progress edit (a blank field)
-   * to a real calendar impossibility (April 31st); [DatePrecision.MONTH] and [DatePrecision.YEAR]
-   * fill in the day/month Room doesn't ask them to know, per [VisitRepository.record]'s contract
-   * that a caller who only knows the month passes the first of it, never a fabricated day.
+   * fail on anything from a still-in-progress edit (a blank field) to a real calendar impossibility
+   * (April 31st); [DatePrecision.MONTH] and [DatePrecision.YEAR] fill in the day/month Room doesn't
+   * ask them to know, per [VisitRepository.record]'s contract that a caller who only knows the
+   * month passes the first of it, never a fabricated day.
    */
-  fun resolveDate(): DateResolution =
+  fun resolveDate(): Result<Long?> =
     when (precision) {
-      DatePrecision.UNKNOWN -> DateResolution.Ready(null)
+      DatePrecision.UNKNOWN -> Result.success(null)
       DatePrecision.DAY ->
         runCatching { LocalDate.of(year.toInt(), month.toInt(), day.toInt()).toEpochDay() }
-          .fold({ DateResolution.Ready(it) }, { DateResolution.Invalid })
       DatePrecision.MONTH ->
         runCatching { LocalDate.of(year.toInt(), month.toInt(), 1).toEpochDay() }
-          .fold({ DateResolution.Ready(it) }, { DateResolution.Invalid })
-      DatePrecision.YEAR ->
-        runCatching { LocalDate.of(year.toInt(), 1, 1).toEpochDay() }
-          .fold({ DateResolution.Ready(it) }, { DateResolution.Invalid })
+      DatePrecision.YEAR -> runCatching { LocalDate.of(year.toInt(), 1, 1).toEpochDay() }
     }
 
   companion object {
@@ -210,10 +212,4 @@ data class VisitDraft(
       )
     }
   }
-}
-
-sealed interface DateResolution {
-  data class Ready(val epochDay: Long?) : DateResolution
-
-  data object Invalid : DateResolution
 }

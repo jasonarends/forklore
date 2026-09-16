@@ -89,25 +89,32 @@ fun PlaceDetailScreen(
           onNoteChange = viewModel::updateNote,
           modifier = Modifier.padding(innerPadding),
         ) {
-          val visits = (visitsState as? VisitsUiState.Success)?.visits ?: emptyList()
-          val people = (visitsState as? VisitsUiState.Success)?.people ?: emptyList()
-          VisitsSection(
-            visits = visits,
-            people = people,
-            draft = visitDraft,
-            onStartAdd = visitsViewModel::startAdd,
-            onStartEdit = visitsViewModel::startEdit,
-            onCancelDraft = visitsViewModel::cancelDraft,
-            onPrecisionChange = visitsViewModel::onPrecisionChange,
-            onYearChange = visitsViewModel::onYearChange,
-            onMonthChange = visitsViewModel::onMonthChange,
-            onDayChange = visitsViewModel::onDayChange,
-            onMealChange = visitsViewModel::onMealChange,
-            onNoteChange = visitsViewModel::onNoteChange,
-            onAttendeesChange = visitsViewModel::onAttendeesChange,
-            onCreatePerson = visitsViewModel::onCreatePerson,
-            onSaveVisit = visitsViewModel::save,
-          )
+          when (val visitsCurrent = visitsState) {
+            VisitsUiState.Loading -> Unit
+            is VisitsUiState.Error ->
+              Text(
+                "Couldn't load visits: ${visitsCurrent.throwable.message}",
+                color = ForkloreTheme.colors.stamp,
+              )
+            is VisitsUiState.Success ->
+              VisitsSection(
+                visits = visitsCurrent.visits,
+                people = visitsCurrent.people,
+                draft = visitDraft,
+                onStartAdd = visitsViewModel::startAdd,
+                onStartEdit = visitsViewModel::startEdit,
+                onCancelDraft = visitsViewModel::cancelDraft,
+                onPrecisionChange = visitsViewModel::onPrecisionChange,
+                onYearChange = visitsViewModel::onYearChange,
+                onMonthChange = visitsViewModel::onMonthChange,
+                onDayChange = visitsViewModel::onDayChange,
+                onMealChange = visitsViewModel::onMealChange,
+                onNoteChange = visitsViewModel::onNoteChange,
+                onAttendeesChange = visitsViewModel::onAttendeesChange,
+                onCreatePerson = visitsViewModel::onCreatePerson,
+                onSaveVisit = visitsViewModel::save,
+              )
+          }
         }
     }
   }

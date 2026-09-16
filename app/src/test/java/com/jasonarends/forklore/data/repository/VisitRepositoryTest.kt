@@ -14,7 +14,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,7 +43,7 @@ class VisitRepositoryTest {
         )
         .allowMainThreadQueries()
         .build()
-    repository = VisitRepository(db.visitDao(), Clock { now })
+    repository = VisitRepository(db, db.visitDao(), Clock { now })
 
     val listId = "list"
     db
@@ -152,9 +151,9 @@ class VisitRepositoryTest {
 
     repository.setAttendees(visitId, emptySet())
 
-    val dropped = db.visitDao().attendeeIncludingDeleted(visitId, ana)
-    assertTrue(dropped != null)
-    assertEquals(now, dropped!!.deletedAt)
+    val dropped =
+      db.visitDao().attendeesForVisitIncludingDeleted(visitId).single { it.personId == ana }
+    assertEquals(now, dropped.deletedAt)
   }
 
   @Test
@@ -173,6 +172,30 @@ class VisitRepositoryTest {
 
       val attendees = db.visitDao().observeForPlaceEntry(entryId).first().single().attendees
       assertEquals(listOf("Ana"), attendees.map { it.name })
-      assertNull(db.visitDao().attendeeIncludingDeleted(visitId, ana)!!.deletedAt)
+      assertNull(
+        db
+          .visitDao()
+          .attendeesForVisitIncludingDeleted(visitId)
+          .single { it.personId == ana }
+          .deletedAt
+      )
     }
+
+  @Test
+  fun updateWithAttendees_appliesTheVisitChangeAndTheAttendeeChangeTogether() = runTest {
+    val visitId =
+      repository.record(
+        placeEntryId = entryId,
+        dateEpochDay = 20_619,
+        datePrecision = DatePrecision.DAY,
+        attendees = listOf(ana),
+      )
+
+    repository.updateWithAttendees(visitId, setOf(bo)) { it.copy(note = "Updated note") }
+
+    val stored = db.visitDao().byId(visitId)!!
+    assertEquals("Updated note", stored.note)
+    val attendees = db.visitDao().observeForPlaceEntry(entryId).first().single().attendees
+    assertEquals(listOf("Bo"), attendees.map { it.name })
+  }
 }
