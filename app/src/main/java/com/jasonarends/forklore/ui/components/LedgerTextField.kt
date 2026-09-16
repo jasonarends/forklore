@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
+import com.jasonarends.forklore.ui.theme.accessibleUppercase
 
 /**
  * A single-line ledger field: `card` fill with an `ink` bottom rule instead of a boxed outline —
@@ -32,7 +33,13 @@ fun LedgerTextField(
     value = value,
     onValueChange = onValueChange,
     modifier = modifier.fillMaxWidth(),
-    label = { Text(label, style = ForkloreType.fieldLabel) },
+    label = {
+      Text(
+        text = label.uppercase(),
+        modifier = Modifier.accessibleUppercase(label),
+        style = ForkloreType.fieldLabel,
+      )
+    },
     textStyle = ForkloreType.fieldInput,
     singleLine = true,
     keyboardOptions = KeyboardOptions(capitalization = capitalization),

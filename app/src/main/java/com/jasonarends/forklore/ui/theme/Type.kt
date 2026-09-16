@@ -1,6 +1,11 @@
 package com.jasonarends.forklore.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -135,10 +140,8 @@ val ForkloreTypography =
  * role here would be byte-for-byte identical to a Material role (the old `topBarTitle`,
  * `sectionLabel`, `stamp`, `chip`), use
  * `MaterialTheme.typography.titleLarge`/`titleSmall`/`labelSmall`/`labelMedium` directly instead of
- * duplicating it here. Display case is left as written rather than transformed to visual-only
- * uppercase: several existing tests match exact text via Compose's semantics tree (e.g.
- * `onNodeWithText("Food")`), and `.uppercase()`-ing a label would break them without weakening the
- * underlying assertion being an option worth taking.
+ * duplicating it here. Section labels, field labels, chips and the stamp render uppercase via
+ * [accessibleUppercase]; see that function for why the semantics tree still carries natural case.
  */
 object ForkloreType {
   val topBarSubtitle =
@@ -196,4 +199,21 @@ object ForkloreType {
     TextStyle(fontFamily = ZillaSlab, fontWeight = FontWeight.SemiBold, fontSize = 14.5.sp)
   val inlineRating =
     TextStyle(fontFamily = ZillaSlab, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+}
+
+/**
+ * Issue #18: displays [naturalCase] uppercase (section labels, field labels, chips, the stamp) but
+ * pins the semantics tree's text back to [naturalCase], so `onNodeWithText("Food")` still matches
+ * the real label rather than the display transform, and so TalkBack reads the word itself instead
+ * of a short all-caps run some TTS engines spell out letter by letter. [extraSemantics] carries
+ * anything else the node needs (e.g. `SectionHeader`'s `heading()`) — `clearAndSetSemantics`
+ * replaces a node's entire semantics config, so it can't be layered on with a second
+ * `Modifier.semantics {}` in the chain without one silently winning over the other.
+ */
+fun Modifier.accessibleUppercase(
+  naturalCase: String,
+  extraSemantics: SemanticsPropertyReceiver.() -> Unit = {},
+): Modifier = clearAndSetSemantics {
+  text = AnnotatedString(naturalCase)
+  extraSemantics()
 }

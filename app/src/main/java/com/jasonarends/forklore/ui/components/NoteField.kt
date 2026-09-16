@@ -18,6 +18,7 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
+import com.jasonarends.forklore.ui.theme.accessibleUppercase
 import com.jasonarends.forklore.ui.theme.hardShadow
 import com.jasonarends.forklore.ui.theme.ruledBackground
 
@@ -42,7 +43,12 @@ fun NoteField(
   val borderColor = if (warning) colors.stamp else colors.cardBorder
   val textColor = if (warning) colors.stamp else colors.ink
   Column(modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
-    Text(text = label, style = ForkloreType.fieldLabel, color = colors.ink2)
+    Text(
+      text = label.uppercase(),
+      modifier = Modifier.accessibleUppercase(label),
+      style = ForkloreType.fieldLabel,
+      color = colors.ink2,
+    )
     Surface(
       modifier =
         Modifier.fillMaxWidth().padding(top = 5.dp).hardShadow(2.dp, 3.dp, colors.cardShadow, 2.dp),

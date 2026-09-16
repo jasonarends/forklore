@@ -10,20 +10,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
+import com.jasonarends.forklore.ui.theme.accessibleUppercase
 
 @Composable
 fun SectionHeader(title: String, modifier: Modifier = Modifier) {
   val colors = ForkloreTheme.colors
   Column(modifier = modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp)) {
     Text(
-      text = title,
-      modifier = Modifier.semantics { heading() },
+      text = title.uppercase(),
+      modifier = Modifier.accessibleUppercase(title) { heading() },
       style = MaterialTheme.typography.titleSmall,
       color = colors.ink2,
     )

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
+import com.jasonarends.forklore.ui.theme.accessibleUppercase
 import com.jasonarends.forklore.ui.theme.tilt
 
 /**
@@ -59,7 +60,11 @@ internal fun LedgerChip(
       if (icon != null) {
         LedgerIcon(icon, tint = contentColor, modifier = Modifier.padding(end = 4.dp))
       }
-      Text(text = label, style = MaterialTheme.typography.labelMedium)
+      Text(
+        text = label.uppercase(),
+        modifier = Modifier.accessibleUppercase(label),
+        style = MaterialTheme.typography.labelMedium,
+      )
     }
   }
 }
@@ -88,7 +93,11 @@ internal fun LedgerStamp(label: String, modifier: Modifier = Modifier) {
         tint = stampColor,
         modifier = Modifier.padding(end = 4.dp),
       )
-      Text(text = label, style = MaterialTheme.typography.labelSmall)
+      Text(
+        text = label.uppercase(),
+        modifier = Modifier.accessibleUppercase(label),
+        style = MaterialTheme.typography.labelSmall,
+      )
     }
   }
 }
