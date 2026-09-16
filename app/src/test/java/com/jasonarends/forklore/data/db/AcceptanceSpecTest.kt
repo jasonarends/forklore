@@ -338,12 +338,16 @@ class AcceptanceSpecTest {
 
   @Test
   fun freeText_isPreservedVerbatim() = runTest {
+    // "places" carries no free text of its own (CLAUDE.md rule 6, issue #13) — a place's writing
+    // lives entirely on the list's entry for it, however messy or multi-line it is.
     val messy = "- great for pizza, menu doesn't "
-    val placeId = place("Halberd", note = messy)
-    val entryId = placeEntry(placeId)
+    val entryId = placeEntry(place("Halberd"))
+    updateEntry(entryId) { it.copy(note = messy) }
+
+    assertEquals(messy, db.placeEntryDao().byId(entryId)!!.note)
+
     updateEntry(entryId) { it.copy(note = "Servers are rude\nSERVICE HORRIBLE") }
 
-    assertEquals(messy, db.placeDao().byId(placeId)!!.note)
     assertTrue(db.placeEntryDao().byId(entryId)!!.note.contains("\n"))
   }
 
@@ -524,12 +528,7 @@ class AcceptanceSpecTest {
         )
     }
 
-  private suspend fun place(
-    name: String,
-    branch: String? = null,
-    warning: String? = null,
-    note: String = "",
-  ): String =
+  private suspend fun place(name: String, branch: String? = null, warning: String? = null): String =
     newId().also {
       db
         .placeDao()
@@ -539,7 +538,6 @@ class AcceptanceSpecTest {
             name = name,
             branchLabel = branch,
             warning = warning,
-            note = note,
             createdAt = now,
             updatedAt = now,
           )

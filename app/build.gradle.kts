@@ -48,6 +48,12 @@ android {
     shaders = false
   }
 
+  // Lets MigrationTestHelper build the "before" database from the exported schema instead of a
+  // hand-maintained copy, so migration tests run against the real previous version. Robolectric
+  // unit tests read the *debug variant's* merged assets (see generateDebugUnitTestConfig), not a
+  // "test" source set of their own, so the schemas are wired onto "debug" rather than "test".
+  sourceSets { getByName("debug") { assets.srcDirs("$projectDir/schemas") } }
+
   packaging {
     resources {
       excludes += "/META-INF/{AL2.0,LGPL2.1}"

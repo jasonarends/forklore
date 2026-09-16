@@ -71,7 +71,6 @@ data class PlaceEntity(
   val provider: String? = null,
   val providerId: String? = null,
   val providerFetchedAt: Long? = null,
-  val note: String = "",
   /** Pricing or policy gotchas: "$27 per person even if you order one thing". */
   val warning: String? = null,
   val createdAt: Long,
