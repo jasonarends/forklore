@@ -1,7 +1,9 @@
 package com.jasonarends.forklore.ui.placedetail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,14 +15,23 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jasonarends.forklore.data.db.DishAliasEntity
+import com.jasonarends.forklore.data.db.DishEntity
+import com.jasonarends.forklore.data.db.DishWithAliases
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
@@ -28,8 +39,11 @@ import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.LedgerChip
 import com.jasonarends.forklore.ui.components.LedgerGlyph
 import com.jasonarends.forklore.ui.components.LedgerIcon
+import com.jasonarends.forklore.ui.components.LedgerPrimaryButton
+import com.jasonarends.forklore.ui.components.LedgerTextField
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.NoteField
 import com.jasonarends.forklore.ui.components.PlaceStatusPicker
@@ -47,6 +61,7 @@ fun PlaceDetailScreen(
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
+  dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
@@ -75,7 +90,10 @@ fun PlaceDetailScreen(
           "Couldn't load this place: ${current.throwable.message}",
           Modifier.padding(innerPadding),
         )
-      is PlaceDetailUiState.Success ->
+      is PlaceDetailUiState.Success -> {
+        val dishesState by dishesViewModel.uiState.collectAsStateWithLifecycle()
+        val dishQuery by dishesViewModel.query.collectAsStateWithLifecycle()
+        val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
           onStatusChange = viewModel::updateStatus,
@@ -83,8 +101,15 @@ fun PlaceDetailScreen(
           onServiceRatingChange = viewModel::updateServiceRating,
           onRevisitIntentChange = viewModel::updateRevisitIntent,
           onNoteChange = viewModel::updateNote,
+          dishes = (dishesState as? DishesUiState.Success)?.dishes ?: emptyList(),
+          dishQuery = dishQuery,
+          dishSuggestions = dishSuggestions,
+          onDishQueryChange = dishesViewModel::onQueryChange,
+          onAddDish = dishesViewModel::addDish,
+          onAddDishAlias = dishesViewModel::addAlias,
           modifier = Modifier.padding(innerPadding),
         )
+      }
     }
   }
 }
@@ -106,6 +131,12 @@ internal fun PlaceDetail(
   onServiceRatingChange: (Rating?) -> Unit,
   onRevisitIntentChange: (RevisitIntent?) -> Unit,
   onNoteChange: (String) -> Unit,
+  dishes: List<DishWithAliases> = emptyList(),
+  dishQuery: String = "",
+  dishSuggestions: List<DishWithAliases> = emptyList(),
+  onDishQueryChange: (String) -> Unit = {},
+  onAddDish: (String) -> Unit = {},
+  onAddDishAlias: (dishId: String, alias: String) -> Unit = { _, _ -> },
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -156,13 +187,183 @@ internal fun PlaceDetail(
     SectionHeader("Would we go back?")
     RevisitIntentPicker(intent = entry.entry.revisitIntent, onIntentChange = onRevisitIntentChange)
 
+    SectionHeader("Dishes")
+    DishesSection(
+      dishes = dishes,
+      query = dishQuery,
+      suggestions = dishSuggestions,
+      onQueryChange = onDishQueryChange,
+      onAddDish = onAddDish,
+      onAddAlias = onAddDishAlias,
+    )
+
     // No SectionHeader here: NoteField already carries its own "Note" label, and a second one
-    // above it would just be the same word twice.
+    // above it would just be the same word twice. testTag disambiguates it from the dish fields
+    // above, which are also text inputs on this same screen.
     NoteField(
       value = entry.entry.note,
       onValueChange = onNoteChange,
-      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
+      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp).testTag("place-note"),
     )
+  }
+}
+
+/**
+ * Every dish recorded at this place entry, plus the field that adds one. Issue #6's scope stops
+ * here — no status, no opinions — but [DishRow] leaves explicit room for both: issue #7's per-dish
+ * `DishStatusChip` (already in `StatusChip.kt`) belongs in the trailing slot of its name row, and
+ * issue #8's opinion cards stack in the space below it. Neither is wired in yet.
+ */
+@Composable
+private fun DishesSection(
+  dishes: List<DishWithAliases>,
+  query: String,
+  suggestions: List<DishWithAliases>,
+  onQueryChange: (String) -> Unit,
+  onAddDish: (String) -> Unit,
+  onAddAlias: (dishId: String, alias: String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(modifier = modifier.fillMaxWidth()) {
+    if (dishes.isEmpty()) {
+      EmptyState("No dishes yet.")
+    } else {
+      dishes.forEach { dish ->
+        DishRow(
+          dish = dish,
+          onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
+          modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
+        )
+      }
+    }
+    DishEntryField(
+      query = query,
+      suggestions = suggestions,
+      onQueryChange = onQueryChange,
+      onSubmit = onAddDish,
+      modifier = Modifier.padding(top = 8.dp),
+    )
+  }
+}
+
+/**
+ * One recorded dish. The name row uses [Arrangement.SpaceBetween] specifically so a future
+ * [com.jasonarends.forklore.ui.components.DishStatusChip] (issue #7) has a trailing slot next to
+ * the name without needing to restructure this row — it renders nothing there today. The alias list
+ * and "alternate spelling" affordance sit below the name, and the padding beneath them is where
+ * issue #8's opinion cards will stack, one per author, rather than being packed against the next
+ * dish.
+ */
+@Composable
+private fun DishRow(
+  dish: DishWithAliases,
+  onAddAlias: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val colors = ForkloreTheme.colors
+  Column(modifier = modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text(text = dish.dish.canonicalName, style = ForkloreType.dishName, color = colors.ink)
+      // Reserved for issue #7's per-dish DishStatusChip — deliberately empty until that issue
+      // wires up DishInterestEntity for this dish.
+    }
+    if (dish.aliases.isNotEmpty()) {
+      Text(
+        text = "also: " + dish.aliases.joinToString(", ") { it.alias },
+        style = ForkloreType.branchLabel,
+        color = colors.ink2,
+        modifier = Modifier.padding(top = 2.dp),
+      )
+    }
+    AliasEntry(onAdd = onAddAlias, modifier = Modifier.padding(top = 6.dp))
+    // Reserved for issue #8's opinion cards, which stack here, below this dish's own row and
+    // above the next dish's.
+  }
+}
+
+/** A collapsed "+ alternate spelling" link that expands into a field, mirroring [PersonPicker]. */
+@Composable
+private fun AliasEntry(onAdd: (String) -> Unit, modifier: Modifier = Modifier) {
+  var expanded by rememberSaveable { mutableStateOf(false) }
+  var text by rememberSaveable { mutableStateOf("") }
+  val colors = ForkloreTheme.colors
+  if (expanded) {
+    Row(
+      modifier = modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      LedgerTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = "Alternate spelling",
+        modifier = Modifier.weight(1f).testTag("alias-field"),
+      )
+      TextButton(
+        enabled = text.isNotBlank(),
+        onClick = {
+          onAdd(text.trim())
+          text = ""
+          expanded = false
+        },
+      ) {
+        Text("Add")
+      }
+    }
+  } else {
+    TextButton(onClick = { expanded = true }, modifier = modifier) {
+      Text("+ Alternate spelling", color = colors.ink2)
+    }
+  }
+}
+
+/**
+ * The "add a dish" field: typing offers matching [suggestions] as chips (see
+ * [DishesViewModel.suggestions]) so a dish already recorded under a different spelling is picked
+ * rather than re-typed into a duplicate; tapping one submits it exactly as [onSubmit] would. The
+ * button submits whatever was typed regardless — `DishRepository.findOrCreateDish` is what actually
+ * guards against a duplicate landing in Room; this field only makes the existing option visible.
+ */
+@Composable
+private fun DishEntryField(
+  query: String,
+  suggestions: List<DishWithAliases>,
+  onQueryChange: (String) -> Unit,
+  onSubmit: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(modifier = modifier.fillMaxWidth()) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      LedgerTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        label = "Add a dish",
+        capitalization = KeyboardCapitalization.Words,
+        modifier = Modifier.weight(1f).testTag("dish-query-field"),
+      )
+      LedgerPrimaryButton(
+        text = "Add",
+        onClick = { onSubmit(query) },
+        enabled = query.isNotBlank(),
+      )
+    }
+    if (suggestions.isNotEmpty()) {
+      FlowRow(
+        modifier = Modifier.padding(top = 6.dp).testTag("dish-suggestions"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        suggestions.forEach { suggestion ->
+          LedgerChip(
+            label = suggestion.dish.canonicalName,
+            selected = false,
+            onClick = { onSubmit(suggestion.dish.canonicalName) },
+            modifier = Modifier.testTag("dish-suggestion-${suggestion.dish.id}"),
+          )
+        }
+      }
+    }
   }
 }
 
@@ -226,6 +427,31 @@ private fun PlaceDetailPopulatedPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
+        dishes =
+          listOf(
+            DishWithAliases(
+              dish =
+                DishEntity(
+                  placeEntryId = "entry",
+                  canonicalName = "Barrel Potatoes",
+                  normalizedName = "barrel potatoes",
+                  createdAt = 0,
+                  updatedAt = 0,
+                ),
+              aliases =
+                listOf(
+                  DishAliasEntity(
+                    dishId = "dish",
+                    alias = "potatoe barrels",
+                    normalized = "potatoe barrels",
+                    createdAt = 0,
+                    updatedAt = 0,
+                  )
+                ),
+            )
+          ),
+        onAddDish = {},
+        onAddDishAlias = { _, _ -> },
       )
     }
   }

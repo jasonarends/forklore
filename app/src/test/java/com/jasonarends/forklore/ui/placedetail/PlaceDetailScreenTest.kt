@@ -6,9 +6,14 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.jasonarends.forklore.data.db.DishAliasEntity
+import com.jasonarends.forklore.data.db.DishEntity
+import com.jasonarends.forklore.data.db.DishWithAliases
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
@@ -118,7 +123,13 @@ class PlaceDetailScreenTest {
       }
     }
 
-    compose.onNode(hasSetTextAction()).performTextInput("Great pasta")
+    // The testTag lives on NoteField's outer container, not the text field node itself (same
+    // reason "food"/"service" above are matched via hasAnyAncestor rather than hasTestTag
+    // directly), which disambiguates it from the dish fields this screen now also renders.
+    compose
+      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
+      .performScrollTo()
+      .performTextInput("Great pasta")
 
     assertEquals("Great pasta", note)
   }
@@ -144,6 +155,106 @@ class PlaceDetailScreenTest {
 
     assertEquals(Rating.LIFE_CHANGING, foodRating)
     assertEquals(null, serviceRating)
+  }
+
+  @Test
+  fun dishesRecordedAtThisEntry_areListedWithTheirAliases() {
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+          dishes = listOf(dish("Barrel Potatoes", aliases = listOf("potatoe barrels"))),
+        )
+      }
+    }
+
+    compose.onNodeWithText("Barrel Potatoes").assertExists()
+    compose.onNodeWithText("also: potatoe barrels").assertExists()
+  }
+
+  @Test
+  fun typingADishName_andPressingAdd_submitsIt() {
+    var added: String? = null
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+          dishQuery = "Burnt Ends",
+          onAddDish = { added = it },
+        )
+      }
+    }
+
+    // The form has grown tall enough that the button sits below Robolectric's default viewport;
+    // performScrollTo() brings it into the scrollable Column's visible area before clicking.
+    compose.onNodeWithText("Add").performScrollTo().performClick()
+
+    assertEquals("Burnt Ends", added)
+  }
+
+  /**
+   * Issue #6's "done when": typing a spelling already taught to an existing dish (via an alias)
+   * offers that dish as a suggestion, and picking it submits the same name a fresh lookup would
+   * resolve back to the existing row — never a hand-typed duplicate.
+   */
+  @Test
+  fun typingAKnownAlias_offersTheExistingDishAsASuggestion_thatSubmitsIt() {
+    var added: String? = null
+    val existing = dish("Barrel Potatoes", aliases = listOf("barrel tots"))
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+          dishes = listOf(existing),
+          dishQuery = "barrel tots",
+          dishSuggestions = listOf(existing),
+          onAddDish = { added = it },
+        )
+      }
+    }
+
+    compose.onNodeWithTag("dish-suggestion-${existing.dish.id}").performScrollTo().performClick()
+
+    assertEquals("Barrel Potatoes", added)
+  }
+
+  private fun dish(name: String, aliases: List<String> = emptyList()): DishWithAliases {
+    val entity =
+      DishEntity(
+        placeEntryId = "entry",
+        canonicalName = name,
+        normalizedName = name.lowercase(),
+        createdAt = 0,
+        updatedAt = 0,
+      )
+    return DishWithAliases(
+      dish = entity,
+      aliases =
+        aliases.map {
+          DishAliasEntity(
+            dishId = entity.id,
+            alias = it,
+            normalized = it.lowercase(),
+            createdAt = 0,
+            updatedAt = 0,
+          )
+        },
+    )
   }
 
   private fun entry(name: String, status: PlaceStatus = PlaceStatus.WANT): PlaceEntryWithPlace {
