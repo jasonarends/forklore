@@ -74,14 +74,16 @@ class DishesViewModel(
   /**
    * Always routes through [DishRepository.findOrCreateDish] — never a direct insert — which is what
    * resolves "barrel tots" back to an existing "Barrel Potatoes" row rather than creating a second
-   * one. Clears [query] once the write lands, whether it created a dish or found one.
+   * one. Clears [query] before the write lands rather than after: the field and the "Add" button
+   * are keyed off [query], so clearing it synchronously closes the double-submit window (two
+   * launches both racing to insert the same normalized name into a unique index) and stops a
+   * keystroke made mid-write from being silently dropped when the post-write clear would otherwise
+   * overwrite it.
    */
   fun addDish(name: String) {
     if (name.isBlank()) return
-    viewModelScope.launch {
-      dishRepository.findOrCreateDish(placeEntryId, name)
-      _query.value = ""
-    }
+    _query.value = ""
+    viewModelScope.launch { dishRepository.findOrCreateDish(placeEntryId, name) }
   }
 
   /** No-ops (via [DishRepository.addAlias]) when the spelling already resolves to this dish. */

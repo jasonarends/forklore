@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -101,12 +102,16 @@ fun PlaceDetailScreen(
           onServiceRatingChange = viewModel::updateServiceRating,
           onRevisitIntentChange = viewModel::updateRevisitIntent,
           onNoteChange = viewModel::updateNote,
-          dishes = (dishesState as? DishesUiState.Success)?.dishes ?: emptyList(),
-          dishQuery = dishQuery,
-          dishSuggestions = dishSuggestions,
-          onDishQueryChange = dishesViewModel::onQueryChange,
-          onAddDish = dishesViewModel::addDish,
-          onAddDishAlias = dishesViewModel::addAlias,
+          dishesSection = {
+            DishesSection(
+              state = dishesState,
+              query = dishQuery,
+              suggestions = dishSuggestions,
+              onQueryChange = dishesViewModel::onQueryChange,
+              onAddDish = dishesViewModel::addDish,
+              onAddAlias = dishesViewModel::addAlias,
+            )
+          },
           modifier = Modifier.padding(innerPadding),
         )
       }
@@ -131,12 +136,7 @@ internal fun PlaceDetail(
   onServiceRatingChange: (Rating?) -> Unit,
   onRevisitIntentChange: (RevisitIntent?) -> Unit,
   onNoteChange: (String) -> Unit,
-  dishes: List<DishWithAliases> = emptyList(),
-  dishQuery: String = "",
-  dishSuggestions: List<DishWithAliases> = emptyList(),
-  onDishQueryChange: (String) -> Unit = {},
-  onAddDish: (String) -> Unit = {},
-  onAddDishAlias: (dishId: String, alias: String) -> Unit = { _, _ -> },
+  dishesSection: @Composable () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -188,35 +188,27 @@ internal fun PlaceDetail(
     RevisitIntentPicker(intent = entry.entry.revisitIntent, onIntentChange = onRevisitIntentChange)
 
     SectionHeader("Dishes")
-    DishesSection(
-      dishes = dishes,
-      query = dishQuery,
-      suggestions = dishSuggestions,
-      onQueryChange = onDishQueryChange,
-      onAddDish = onAddDish,
-      onAddAlias = onAddDishAlias,
-    )
+    dishesSection()
 
     // No SectionHeader here: NoteField already carries its own "Note" label, and a second one
-    // above it would just be the same word twice. testTag disambiguates it from the dish fields
-    // above, which are also text inputs on this same screen.
+    // above it would just be the same word twice.
     NoteField(
       value = entry.entry.note,
       onValueChange = onNoteChange,
-      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp).testTag("place-note"),
+      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
     )
   }
 }
 
 /**
- * Every dish recorded at this place entry, plus the field that adds one. Issue #6's scope stops
- * here — no status, no opinions — but [DishRow] leaves explicit room for both: issue #7's per-dish
- * `DishStatusChip` (already in `StatusChip.kt`) belongs in the trailing slot of its name row, and
- * issue #8's opinion cards stack in the space below it. Neither is wired in yet.
+ * Every dish recorded at this place entry, plus the field that adds one. `internal` (not `private`)
+ * so tests can exercise it directly rather than through the whole [PlaceDetail] column. [DishRow]'s
+ * name row leaves a trailing slot for issue #7's per-dish status chip, and space below it for
+ * issue #8's opinion cards — neither is wired in yet.
  */
 @Composable
-private fun DishesSection(
-  dishes: List<DishWithAliases>,
+internal fun DishesSection(
+  state: DishesUiState,
   query: String,
   suggestions: List<DishWithAliases>,
   onQueryChange: (String) -> Unit,
@@ -224,17 +216,30 @@ private fun DishesSection(
   onAddAlias: (dishId: String, alias: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val colors = ForkloreTheme.colors
   Column(modifier = modifier.fillMaxWidth()) {
-    if (dishes.isEmpty()) {
-      EmptyState("No dishes yet.")
-    } else {
-      dishes.forEach { dish ->
-        DishRow(
-          dish = dish,
-          onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
-          modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
+    when (state) {
+      DishesUiState.Loading -> Unit
+      is DishesUiState.Error ->
+        Text(
+          "Couldn't load dishes: ${state.throwable.message}",
+          style = ForkloreType.fieldInput,
+          color = colors.stamp,
         )
-      }
+      is DishesUiState.Success ->
+        if (state.dishes.isEmpty()) {
+          EmptyState("No dishes yet.")
+        } else {
+          state.dishes.forEach { dish ->
+            key(dish.dish.id) {
+              DishRow(
+                dish = dish,
+                onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
+                modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
+              )
+            }
+          }
+        }
     }
     DishEntryField(
       query = query,
@@ -246,14 +251,7 @@ private fun DishesSection(
   }
 }
 
-/**
- * One recorded dish. The name row uses [Arrangement.SpaceBetween] specifically so a future
- * [com.jasonarends.forklore.ui.components.DishStatusChip] (issue #7) has a trailing slot next to
- * the name without needing to restructure this row — it renders nothing there today. The alias list
- * and "alternate spelling" affordance sit below the name, and the padding beneath them is where
- * issue #8's opinion cards will stack, one per author, rather than being packed against the next
- * dish.
- */
+/** One recorded dish, its aliases, and the affordance to add another spelling. */
 @Composable
 private fun DishRow(
   dish: DishWithAliases,
@@ -264,8 +262,6 @@ private fun DishRow(
   Column(modifier = modifier.fillMaxWidth().padding(vertical = 10.dp)) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text(text = dish.dish.canonicalName, style = ForkloreType.dishName, color = colors.ink)
-      // Reserved for issue #7's per-dish DishStatusChip — deliberately empty until that issue
-      // wires up DishInterestEntity for this dish.
     }
     if (dish.aliases.isNotEmpty()) {
       Text(
@@ -276,8 +272,6 @@ private fun DishRow(
       )
     }
     AliasEntry(onAdd = onAddAlias, modifier = Modifier.padding(top = 6.dp))
-    // Reserved for issue #8's opinion cards, which stack here, below this dish's own row and
-    // above the next dish's.
   }
 }
 
@@ -427,31 +421,40 @@ private fun PlaceDetailPopulatedPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
-        dishes =
-          listOf(
-            DishWithAliases(
-              dish =
-                DishEntity(
-                  placeEntryId = "entry",
-                  canonicalName = "Barrel Potatoes",
-                  normalizedName = "barrel potatoes",
-                  createdAt = 0,
-                  updatedAt = 0,
-                ),
-              aliases =
+        dishesSection = {
+          DishesSection(
+            state =
+              DishesUiState.Success(
                 listOf(
-                  DishAliasEntity(
-                    dishId = "dish",
-                    alias = "potatoe barrels",
-                    normalized = "potatoe barrels",
-                    createdAt = 0,
-                    updatedAt = 0,
+                  DishWithAliases(
+                    dish =
+                      DishEntity(
+                        placeEntryId = "entry",
+                        canonicalName = "Barrel Potatoes",
+                        normalizedName = "barrel potatoes",
+                        createdAt = 0,
+                        updatedAt = 0,
+                      ),
+                    aliases =
+                      listOf(
+                        DishAliasEntity(
+                          dishId = "dish",
+                          alias = "potatoe barrels",
+                          normalized = "potatoe barrels",
+                          createdAt = 0,
+                          updatedAt = 0,
+                        )
+                      ),
                   )
-                ),
-            )
-          ),
-        onAddDish = {},
-        onAddDishAlias = { _, _ -> },
+                )
+              ),
+            query = "",
+            suggestions = emptyList(),
+            onQueryChange = {},
+            onAddDish = {},
+            onAddAlias = { _, _ -> },
+          )
+        },
       )
     }
   }

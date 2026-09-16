@@ -9,7 +9,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.jasonarends.forklore.data.db.DishAliasEntity
 import com.jasonarends.forklore.data.db.DishEntity
@@ -123,13 +122,7 @@ class PlaceDetailScreenTest {
       }
     }
 
-    // The testTag lives on NoteField's outer container, not the text field node itself (same
-    // reason "food"/"service" above are matched via hasAnyAncestor rather than hasTestTag
-    // directly), which disambiguates it from the dish fields this screen now also renders.
-    compose
-      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
-      .performScrollTo()
-      .performTextInput("Great pasta")
+    compose.onNode(hasSetTextAction()).performTextInput("Great pasta")
 
     assertEquals("Great pasta", note)
   }
@@ -161,14 +154,16 @@ class PlaceDetailScreenTest {
   fun dishesRecordedAtThisEntry_areListedWithTheirAliases() {
     compose.setContent {
       ForkloreTheme {
-        PlaceDetail(
-          entry = entry("Halberd"),
-          onStatusChange = {},
-          onFoodRatingChange = {},
-          onServiceRatingChange = {},
-          onRevisitIntentChange = {},
-          onNoteChange = {},
-          dishes = listOf(dish("Barrel Potatoes", aliases = listOf("potatoe barrels"))),
+        DishesSection(
+          state =
+            DishesUiState.Success(
+              listOf(dish("Barrel Potatoes", aliases = listOf("potatoe barrels")))
+            ),
+          query = "",
+          suggestions = emptyList(),
+          onQueryChange = {},
+          onAddDish = {},
+          onAddAlias = { _, _ -> },
         )
       }
     }
@@ -182,22 +177,18 @@ class PlaceDetailScreenTest {
     var added: String? = null
     compose.setContent {
       ForkloreTheme {
-        PlaceDetail(
-          entry = entry("Halberd"),
-          onStatusChange = {},
-          onFoodRatingChange = {},
-          onServiceRatingChange = {},
-          onRevisitIntentChange = {},
-          onNoteChange = {},
-          dishQuery = "Burnt Ends",
+        DishesSection(
+          state = DishesUiState.Success(emptyList()),
+          query = "Burnt Ends",
+          suggestions = emptyList(),
+          onQueryChange = {},
           onAddDish = { added = it },
+          onAddAlias = { _, _ -> },
         )
       }
     }
 
-    // The form has grown tall enough that the button sits below Robolectric's default viewport;
-    // performScrollTo() brings it into the scrollable Column's visible area before clicking.
-    compose.onNodeWithText("Add").performScrollTo().performClick()
+    compose.onNodeWithText("Add").performClick()
 
     assertEquals("Burnt Ends", added)
   }
@@ -213,22 +204,18 @@ class PlaceDetailScreenTest {
     val existing = dish("Barrel Potatoes", aliases = listOf("barrel tots"))
     compose.setContent {
       ForkloreTheme {
-        PlaceDetail(
-          entry = entry("Halberd"),
-          onStatusChange = {},
-          onFoodRatingChange = {},
-          onServiceRatingChange = {},
-          onRevisitIntentChange = {},
-          onNoteChange = {},
-          dishes = listOf(existing),
-          dishQuery = "barrel tots",
-          dishSuggestions = listOf(existing),
+        DishesSection(
+          state = DishesUiState.Success(listOf(existing)),
+          query = "barrel tots",
+          suggestions = listOf(existing),
+          onQueryChange = {},
           onAddDish = { added = it },
+          onAddAlias = { _, _ -> },
         )
       }
     }
 
-    compose.onNodeWithTag("dish-suggestion-${existing.dish.id}").performScrollTo().performClick()
+    compose.onNodeWithTag("dish-suggestion-${existing.dish.id}").performClick()
 
     assertEquals("Barrel Potatoes", added)
   }

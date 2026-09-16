@@ -12,6 +12,7 @@ import com.jasonarends.forklore.testing.MainDispatcherRule
 import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -78,14 +79,22 @@ class DishesViewModelTest {
 
   @After fun tearDown() = db.close()
 
-  private fun viewModel() = DishesViewModel(repository, entryId)
+  /**
+   * Subscribes [DishesViewModel.uiState] and [DishesViewModel.suggestions] on [backgroundScope] so
+   * their `WhileSubscribed` upstream flows are live for the rest of the test, without every test
+   * repeating the two collectors itself.
+   */
+  private fun TestScope.viewModel(): DishesViewModel {
+    val viewModel = DishesViewModel(repository, entryId)
+    backgroundScope.launch { viewModel.uiState.collect {} }
+    backgroundScope.launch { viewModel.suggestions.collect {} }
+    return viewModel
+  }
 
   @Test
   fun addDish_createsIt_andClearsTheQuery() =
     runTest(testDispatcher) {
       val viewModel = viewModel()
-      backgroundScope.launch { viewModel.uiState.collect {} }
-      backgroundScope.launch { viewModel.suggestions.collect {} }
 
       viewModel.onQueryChange("Barrel Potatoes")
       viewModel.addDish("Barrel Potatoes")
@@ -100,8 +109,6 @@ class DishesViewModelTest {
   fun addDish_calledTwiceWithTheSameSpelling_doesNotCreateADuplicate() =
     runTest(testDispatcher) {
       val viewModel = viewModel()
-      backgroundScope.launch { viewModel.uiState.collect {} }
-      backgroundScope.launch { viewModel.suggestions.collect {} }
 
       viewModel.addDish("Barrel Potatoes")
       advanceUntilIdle()
@@ -121,8 +128,6 @@ class DishesViewModelTest {
   fun typingAKnownDishUnderADifferentSpelling_offersTheExistingDish_ratherThanCreatingASecondOne() =
     runTest(testDispatcher) {
       val viewModel = viewModel()
-      backgroundScope.launch { viewModel.uiState.collect {} }
-      backgroundScope.launch { viewModel.suggestions.collect {} }
       viewModel.addDish("Barrel Potatoes")
       advanceUntilIdle()
       val existingId = (viewModel.uiState.value as DishesUiState.Success).dishes.single().dish.id
@@ -149,8 +154,6 @@ class DishesViewModelTest {
   fun blankQuery_offersNoSuggestions() =
     runTest(testDispatcher) {
       val viewModel = viewModel()
-      backgroundScope.launch { viewModel.uiState.collect {} }
-      backgroundScope.launch { viewModel.suggestions.collect {} }
       viewModel.addDish("Barrel Potatoes")
       advanceUntilIdle()
 
@@ -164,8 +167,6 @@ class DishesViewModelTest {
   fun aQueryMatchingNoRecordedDish_offersNoSuggestions() =
     runTest(testDispatcher) {
       val viewModel = viewModel()
-      backgroundScope.launch { viewModel.uiState.collect {} }
-      backgroundScope.launch { viewModel.suggestions.collect {} }
       viewModel.addDish("Barrel Potatoes")
       advanceUntilIdle()
 
@@ -179,8 +180,6 @@ class DishesViewModelTest {
   fun addAlias_isReflectedInTheDishesList() =
     runTest(testDispatcher) {
       val viewModel = viewModel()
-      backgroundScope.launch { viewModel.uiState.collect {} }
-      backgroundScope.launch { viewModel.suggestions.collect {} }
       viewModel.addDish("Crème Brûlée")
       advanceUntilIdle()
       val dishId = (viewModel.uiState.value as DishesUiState.Success).dishes.single().dish.id
