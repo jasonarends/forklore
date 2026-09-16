@@ -15,17 +15,16 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
-import com.jasonarends.forklore.ui.theme.accessibleUppercase
 
 @Composable
 fun SectionHeader(title: String, modifier: Modifier = Modifier) {
   val colors = ForkloreTheme.colors
   Column(modifier = modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp)) {
-    Text(
-      text = title.uppercase(),
-      modifier = Modifier.accessibleUppercase(title) { heading() },
+    UppercaseLabel(
+      text = title,
       style = MaterialTheme.typography.titleSmall,
       color = colors.ink2,
+      extraSemantics = { heading() },
     )
     HorizontalDivider(
       color = colors.rule,
