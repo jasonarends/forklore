@@ -1,12 +1,16 @@
 package com.jasonarends.forklore.ui.placedetail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,38 +28,76 @@ import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.LedgerGlyph
+import com.jasonarends.forklore.ui.components.LedgerIcon
+import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.NoteField
 import com.jasonarends.forklore.ui.components.PlaceStatusPicker
 import com.jasonarends.forklore.ui.components.RatingPicker
 import com.jasonarends.forklore.ui.components.RevisitIntentPicker
 import com.jasonarends.forklore.ui.components.SectionHeader
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
+import com.jasonarends.forklore.ui.theme.ForkloreType
+import com.jasonarends.forklore.ui.theme.dashedBorder
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceDetailScreen(
   placeEntryId: String,
+  onBack: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
-  when (val current = state) {
-    PlaceDetailUiState.Loading -> Unit
-    PlaceDetailUiState.NotFound -> EmptyState("This place couldn't be found.", modifier)
-    is PlaceDetailUiState.Error ->
-      Text("Couldn't load this place: ${current.throwable.message}", modifier)
-    is PlaceDetailUiState.Success ->
-      PlaceDetail(
-        entry = current.entry,
-        onStatusChange = viewModel::updateStatus,
-        onFoodRatingChange = viewModel::updateFoodRating,
-        onServiceRatingChange = viewModel::updateServiceRating,
-        onRevisitIntentChange = viewModel::updateRevisitIntent,
-        onNoteChange = viewModel::updateNote,
-        modifier = modifier,
-      )
+  // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
+  // which
+  // isn't smart-castable (each read can return a different instance across recompositions), so both
+  // the title below and the `when` in Scaffold's content match on this same captured `current`
+  // instead of re-reading `state` a second time and risking the two disagreeing.
+  val current = state
+  // The top bar repeats the same name/branch the body heading shows (see PlaceDetail below), so
+  // it needs the name before the rest of the screen is ready to render.
+  val title =
+    (current as? PlaceDetailUiState.Success)?.entry?.let {
+      listOfNotNull(it.place.name, it.place.branchLabel).joinToString(" · ")
+    } ?: "Place"
+  Scaffold(
+    modifier = modifier,
+    topBar = { LedgerTopBar(title = title, subtitle = "the receipts", onBack = onBack) },
+    containerColor = ForkloreTheme.colors.paper,
+  ) { innerPadding ->
+    when (current) {
+      PlaceDetailUiState.Loading -> Unit
+      PlaceDetailUiState.NotFound ->
+        EmptyState("This place couldn't be found.", Modifier.padding(innerPadding))
+      is PlaceDetailUiState.Error ->
+        Text(
+          "Couldn't load this place: ${current.throwable.message}",
+          Modifier.padding(innerPadding),
+        )
+      is PlaceDetailUiState.Success ->
+        PlaceDetail(
+          entry = current.entry,
+          onStatusChange = viewModel::updateStatus,
+          onFoodRatingChange = viewModel::updateFoodRating,
+          onServiceRatingChange = viewModel::updateServiceRating,
+          onRevisitIntentChange = viewModel::updateRevisitIntent,
+          onNoteChange = viewModel::updateNote,
+          modifier = Modifier.padding(innerPadding),
+        )
+    }
   }
 }
 
+/**
+ * Stateless by design: state in, events out. Only the screen-level composable sees a ViewModel.
+ *
+ * The large heading repeats the name/branch already shown in the top bar (see [PlaceDetailScreen])
+ * — a deliberate "ledger repeats its own header" touch straight from the frozen mockup, not an
+ * oversight. It only reads as duplication when both render in the same semantics tree, which
+ * happens in the full [PlaceDetailScreen] (never asserted on by exact place name in this codebase's
+ * tests) but not when this composable is exercised directly, as most of this file's tests do.
+ */
 @Composable
 internal fun PlaceDetail(
   entry: PlaceEntryWithPlace,
@@ -66,32 +108,30 @@ internal fun PlaceDetail(
   onNoteChange: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+  val colors = ForkloreTheme.colors
+  Column(
+    modifier =
+      modifier
+        .fillMaxSize()
+        .background(colors.paper)
+        .padding(horizontal = 20.dp)
+        .verticalScroll(rememberScrollState())
+  ) {
     Text(
       text = listOfNotNull(entry.place.name, entry.place.branchLabel).joinToString(" · "),
-      style = MaterialTheme.typography.headlineSmall,
+      style = ForkloreType.placeNameDetail,
+      color = colors.ink,
+      modifier = Modifier.padding(top = 14.dp),
     )
     entry.place.address?.let {
       Text(
         text = it,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = ForkloreType.branchLabel,
+        color = colors.ink2,
+        modifier = Modifier.padding(top = 4.dp),
       )
     }
-    entry.place.warning?.let { warning ->
-      Surface(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-      ) {
-        Text(
-          text = warning,
-          modifier = Modifier.padding(12.dp),
-          style = MaterialTheme.typography.bodyMedium,
-        )
-      }
-    }
+    entry.place.warning?.let { warning -> WarningCard(warning) }
 
     SectionHeader("Status")
     PlaceStatusPicker(status = entry.entry.status, onStatusChange = onStatusChange)
@@ -121,8 +161,33 @@ internal fun PlaceDetail(
     NoteField(
       value = entry.entry.note,
       onValueChange = onNoteChange,
-      modifier = Modifier.padding(top = 16.dp),
+      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
     )
+  }
+}
+
+/**
+ * The dashed-stamp warning card, per issue #15: 2px dashed `stamp` border with a circle-slash icon.
+ * The mockup bolds the opening clause via a one-off fixture; a real generic bold-first- clause
+ * parser isn't warranted for arbitrary free text, so this renders the warning plainly.
+ */
+@Composable
+private fun WarningCard(warning: String) {
+  val colors = ForkloreTheme.colors
+  Surface(
+    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).dashedBorder(colors.stamp),
+    shape = RoundedCornerShape(3.dp),
+    color = colors.card,
+    contentColor = colors.stamp,
+  ) {
+    Row(modifier = Modifier.padding(11.dp)) {
+      LedgerIcon(
+        LedgerGlyph.CircleSlash,
+        tint = colors.stamp,
+        modifier = Modifier.padding(end = 8.dp),
+      )
+      Text(text = warning, style = ForkloreType.fieldInput, color = colors.stamp)
+    }
   }
 }
 

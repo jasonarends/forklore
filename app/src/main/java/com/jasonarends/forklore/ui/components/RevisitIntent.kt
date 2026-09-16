@@ -1,17 +1,22 @@
 package com.jasonarends.forklore.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.data.db.RevisitIntent
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
+import com.jasonarends.forklore.ui.theme.ForkloreType
+import com.jasonarends.forklore.ui.theme.wavyUnderline
 
 val RevisitIntent.label: String
   get() =
@@ -23,8 +28,11 @@ val RevisitIntent.label: String
     }
 
 /**
- * Picks whether we'd go back, or leaves it unset. Tapping the current answer clears it — a place
- * with no visits yet has no revisit intent, and forcing one would invent an opinion nobody has.
+ * Plain inline words, not chips — the wavy stamp-colored underline is what marks the answer, per
+ * issue #15's "RevisitIntent" component. `FlowRow` rather than the mockup's single row, so this
+ * still wraps rather than overflows at large system font scales. Tapping the current answer clears
+ * it — a place with no visits yet has no revisit intent, and forcing one would invent an opinion
+ * nobody has.
  */
 @Composable
 fun RevisitIntentPicker(
@@ -32,13 +40,28 @@ fun RevisitIntentPicker(
   onIntentChange: (RevisitIntent?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  ChoiceChips(
-    options = RevisitIntent.entries,
-    selected = intent,
-    onSelect = { picked -> onIntentChange(picked.takeUnless { it == intent }) },
-    label = { it.label },
-    modifier = modifier,
-  )
+  val colors = ForkloreTheme.colors
+  FlowRow(
+    modifier = modifier.selectableGroup(),
+    horizontalArrangement = Arrangement.spacedBy(14.dp),
+  ) {
+    RevisitIntent.entries.forEach { option ->
+      val isSelected = option == intent
+      Text(
+        text = option.label,
+        modifier =
+          Modifier.minimumInteractiveComponentSize()
+            .selectable(
+              selected = isSelected,
+              onClick = { onIntentChange(option.takeUnless { it == intent }) },
+              role = Role.RadioButton,
+            )
+            .then(if (isSelected) Modifier.wavyUnderline(colors.stamp) else Modifier),
+        style = ForkloreType.button,
+        color = colors.ink,
+      )
+    }
+  }
 }
 
 @PreviewLightDark
@@ -46,10 +69,9 @@ fun RevisitIntentPicker(
 private fun RevisitIntentPickerPreview() {
   ForkloreTheme {
     Surface {
-      var intent by remember { mutableStateOf<RevisitIntent?>(RevisitIntent.EAGER) }
       RevisitIntentPicker(
-        intent = intent,
-        onIntentChange = { intent = it },
+        intent = RevisitIntent.EAGER,
+        onIntentChange = {},
         modifier = Modifier.padding(16.dp),
       )
     }

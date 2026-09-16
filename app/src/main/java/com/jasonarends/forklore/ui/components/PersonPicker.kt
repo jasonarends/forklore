@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -18,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.data.db.PersonEntity
@@ -64,8 +64,8 @@ fun PersonPicker(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       visible.forEach { person ->
         val isSelected = person.id in selected
-        FilterChip(
-          modifier = Modifier.testTag("person-picker-chip-${person.id}"),
+        LedgerChip(
+          label = person.name,
           selected = isSelected,
           onClick = {
             val next =
@@ -77,7 +77,8 @@ fun PersonPicker(
               }
             onSelectionChange(next)
           },
-          label = { Text(person.name) },
+          modifier = Modifier.testTag("person-picker-chip-${person.id}"),
+          role = if (multiSelect) Role.Checkbox else Role.RadioButton,
         )
       }
     }
