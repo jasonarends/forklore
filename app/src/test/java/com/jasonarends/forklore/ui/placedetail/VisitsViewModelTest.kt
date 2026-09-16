@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -185,6 +186,23 @@ class VisitsViewModelTest {
     viewModel.save()
 
     assertNotNull(viewModel.draft.value?.error)
+  }
+
+  @Test
+  fun save_recoversFromAWriteFailure_insteadOfCrashing() = runTest {
+    // "no-such-entry" doesn't exist, so the visit insert violates the same foreign key
+    // AcceptanceSpecTest and VisitRepositoryTest already exercise — a real, deterministic write
+    // failure with no mocking framework involved. Its own ViewModel, not the shared `viewModel`
+    // field, since that one is wired to a real entryId.
+    val brokenViewModel = VisitsViewModel(visitRepository, personRepository, "no-such-entry")
+    brokenViewModel.startAdd()
+
+    brokenViewModel.save()
+
+    val draft = brokenViewModel.draft.value
+    assertNotNull(draft)
+    assertFalse(draft!!.saving)
+    assertNotNull(draft.error)
   }
 
   @Test

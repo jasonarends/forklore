@@ -74,21 +74,28 @@ class VisitsViewModel(
 
   fun onDayChange(value: String) = updateDraft { it.copy(day = value, error = null) }
 
-  fun onMealChange(meal: Meal?) = updateDraft { it.copy(meal = meal) }
+  fun onMealChange(meal: Meal?) = updateDraft { it.copy(meal = meal, error = null) }
 
-  fun onNoteChange(note: String) = updateDraft { it.copy(note = note) }
+  fun onNoteChange(note: String) = updateDraft { it.copy(note = note, error = null) }
 
-  fun onAttendeesChange(attendees: Set<String>) = updateDraft { it.copy(attendees = attendees) }
+  fun onAttendeesChange(attendees: Set<String>) = updateDraft {
+    it.copy(attendees = attendees, error = null)
+  }
 
   /**
    * The one write [com.jasonarends.forklore.ui.components.PersonPicker] causes directly. Per its
    * KDoc, the new id is folded into the draft's own selection here rather than left for the picker
-   * to infer once [uiState] eventually replays the newly created person.
+   * to infer once [uiState] eventually replays the newly created person. Same crash/stuck-draft
+   * risk as [save] on a write failure, so the same catch.
    */
   fun onCreatePerson(name: String) {
     viewModelScope.launch {
-      val id = personRepository.findOrCreate(name)
-      updateDraft { it.copy(attendees = it.attendees + id) }
+      try {
+        val id = personRepository.findOrCreate(name)
+        updateDraft { it.copy(attendees = it.attendees + id) }
+      } catch (_: SQLiteException) {
+        _draft.update { it?.copy(error = "Couldn't add that person. Try again.") }
+      }
     }
   }
 

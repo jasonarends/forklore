@@ -21,7 +21,9 @@ class VisitRepository(
 
   /**
    * [dateEpochDay] and [datePrecision] travel together: a caller that knows only the month passes
-   * the first of that month with [DatePrecision.MONTH], never a fabricated day.
+   * the first of that month with [DatePrecision.MONTH], never a fabricated day. Inserting the visit
+   * and its attendees is one transaction — a failure partway through must not leave a visit row
+   * with only some of the people who were actually there.
    */
   suspend fun record(
     placeEntryId: String,
@@ -44,11 +46,13 @@ class VisitRepository(
         createdAt = now,
         updatedAt = now,
       )
-    visitDao.insert(visit)
-    attendees.forEach {
-      visitDao.addAttendee(
-        VisitAttendeeEntity(visitId = visit.id, personId = it, createdAt = now, updatedAt = now)
-      )
+    database.withTransaction {
+      visitDao.insert(visit)
+      attendees.forEach {
+        visitDao.addAttendee(
+          VisitAttendeeEntity(visitId = visit.id, personId = it, createdAt = now, updatedAt = now)
+        )
+      }
     }
     return visit.id
   }
