@@ -154,6 +154,28 @@ interface DishDao {
       "AND (d.normalizedName = :normalized OR a.normalized = :normalized) LIMIT 1"
   )
   suspend fun findByAnyName(placeEntryId: String, normalized: String): DishEntity?
+
+  /**
+   * Atomic find-then-insert: Room serializes `@Transaction` suspend functions on its single write
+   * connection, so two concurrent callers (e.g. a double-tapped "Add") can no longer both observe
+   * [findByAnyName] as null and both insert — the second sees the first's row and returns it
+   * instead of racing [insert] into the unique index.
+   */
+  @Transaction
+  suspend fun findOrInsert(placeEntryId: String, normalized: String, dish: DishEntity): DishEntity {
+    findByAnyName(placeEntryId, normalized)?.let {
+      return it
+    }
+    insert(dish)
+    return dish
+  }
+
+  /** Atomic counterpart to [findOrInsert] for aliases — same race, same fix. */
+  @Transaction
+  suspend fun findOrInsertAlias(placeEntryId: String, normalized: String, alias: DishAliasEntity) {
+    if (findByAnyName(placeEntryId, normalized) != null) return
+    insertAlias(alias)
+  }
 }
 
 @Dao

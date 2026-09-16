@@ -6,6 +6,10 @@ import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceListEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -94,6 +98,27 @@ class DishRepositoryTest {
     val resolvedId = repository.findOrCreateDish(placeEntryId, "Barrel Tots")
 
     assertEquals(dishId, resolvedId)
+    assertEquals(1, db.dishDao().observeForPlaceEntry(placeEntryId).first().size)
+  }
+
+  /**
+   * Regresses a real check-then-act race: two callers hitting "Add" for the same dish at once used
+   * to both observe [DishDao.findByAnyName] as null and both insert, one of them throwing against
+   * the unique index. [DishDao.findOrInsert] closes this by running find-then-insert as one
+   * `@Transaction`, which Room serializes on its single write connection — dispatching onto
+   * [Dispatchers.IO] (real threads, not the test dispatcher's virtual time) is what actually
+   * exercises that serialization rather than just interleaving suspension points on one thread.
+   */
+  @Test
+  fun findOrCreateDish_concurrentCallsForTheSameSpelling_createOnlyOneDish() = runTest {
+    coroutineScope {
+      (1..8)
+        .map {
+          async(Dispatchers.IO) { repository.findOrCreateDish(placeEntryId, "Barrel Potatoes") }
+        }
+        .awaitAll()
+    }
+
     assertEquals(1, db.dishDao().observeForPlaceEntry(placeEntryId).first().size)
   }
 

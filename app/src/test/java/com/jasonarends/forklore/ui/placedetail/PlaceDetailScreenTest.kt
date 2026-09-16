@@ -41,6 +41,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = {},
+          dishesSection = {},
         )
       }
     }
@@ -86,6 +87,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = {},
+          dishesSection = {},
         )
       }
     }
@@ -118,11 +120,15 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = {},
           onRevisitIntentChange = {},
           onNoteChange = { note = it },
+          dishesSection = {},
         )
       }
     }
 
-    compose.onNode(hasSetTextAction()).performTextInput("Great pasta")
+    // testTag disambiguates NoteField from other text inputs the Dishes section can add.
+    compose
+      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
+      .performTextInput("Great pasta")
 
     assertEquals("Great pasta", note)
   }
@@ -140,6 +146,7 @@ class PlaceDetailScreenTest {
           onServiceRatingChange = { serviceRating = it },
           onRevisitIntentChange = {},
           onNoteChange = {},
+          dishesSection = {},
         )
       }
     }
@@ -218,6 +225,25 @@ class PlaceDetailScreenTest {
     compose.onNodeWithTag("dish-suggestion-${existing.dish.id}").performClick()
 
     assertEquals("Barrel Potatoes", added)
+  }
+
+  @Test
+  fun aFailedDishesLoad_showsTheFailure_notAnEmptyList() {
+    compose.setContent {
+      ForkloreTheme {
+        DishesSection(
+          state = DishesUiState.Error(RuntimeException("disk full")),
+          query = "",
+          suggestions = emptyList(),
+          onQueryChange = {},
+          onAddDish = {},
+          onAddAlias = { _, _ -> },
+        )
+      }
+    }
+
+    compose.onNodeWithText("Couldn't load dishes: disk full").assertExists()
+    compose.onNodeWithText("No dishes yet.").assertDoesNotExist()
   }
 
   private fun dish(name: String, aliases: List<String> = emptyList()): DishWithAliases {

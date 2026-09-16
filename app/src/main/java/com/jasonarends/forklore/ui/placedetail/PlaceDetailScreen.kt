@@ -136,7 +136,7 @@ internal fun PlaceDetail(
   onServiceRatingChange: (Rating?) -> Unit,
   onRevisitIntentChange: (RevisitIntent?) -> Unit,
   onNoteChange: (String) -> Unit,
-  dishesSection: @Composable () -> Unit = {},
+  dishesSection: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -191,11 +191,12 @@ internal fun PlaceDetail(
     dishesSection()
 
     // No SectionHeader here: NoteField already carries its own "Note" label, and a second one
-    // above it would just be the same word twice.
+    // above it would just be the same word twice. testTag disambiguates it from the dish fields
+    // above, which are also text inputs on this same screen.
     NoteField(
       value = entry.entry.note,
       onValueChange = onNoteChange,
-      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
+      modifier = Modifier.padding(top = 16.dp, bottom = 20.dp).testTag("place-note"),
     )
   }
 }
@@ -226,7 +227,7 @@ internal fun DishesSection(
           style = ForkloreType.fieldInput,
           color = colors.stamp,
         )
-      is DishesUiState.Success ->
+      is DishesUiState.Success -> {
         if (state.dishes.isEmpty()) {
           EmptyState("No dishes yet.")
         } else {
@@ -240,14 +241,18 @@ internal fun DishesSection(
             }
           }
         }
+        // Only rendered once dishes have actually loaded: findOrCreateDish resolves against
+        // this place entry's existing dishes, so a field the user can submit into before that
+        // list is known (or after it's failed to load) would silently write nothing useful.
+        DishEntryField(
+          query = query,
+          suggestions = suggestions,
+          onQueryChange = onQueryChange,
+          onSubmit = onAddDish,
+          modifier = Modifier.padding(top = 8.dp),
+        )
+      }
     }
-    DishEntryField(
-      query = query,
-      suggestions = suggestions,
-      onQueryChange = onQueryChange,
-      onSubmit = onAddDish,
-      modifier = Modifier.padding(top = 8.dp),
-    )
   }
 }
 
@@ -483,6 +488,16 @@ private fun PlaceDetailEmptyPreview() {
         onServiceRatingChange = {},
         onRevisitIntentChange = {},
         onNoteChange = {},
+        dishesSection = {
+          DishesSection(
+            state = DishesUiState.Success(emptyList()),
+            query = "",
+            suggestions = emptyList(),
+            onQueryChange = {},
+            onAddDish = {},
+            onAddAlias = { _, _ -> },
+          )
+        },
       )
     }
   }
