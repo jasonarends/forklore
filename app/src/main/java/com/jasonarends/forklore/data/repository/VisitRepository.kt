@@ -51,4 +51,38 @@ class VisitRepository(private val visitDao: VisitDao, private val clock: Clock =
     val current = visitDao.byId(visitId) ?: return
     visitDao.update(change(current).copy(updatedAt = clock.nowMillis()))
   }
+
+  /**
+   * Replaces who attended with exactly [personIds]: anyone missing from the current attendee list
+   * is added, anyone currently recorded but no longer in [personIds] is soft-deleted (see
+   * CLAUDE.md, "Delete means soft delete") rather than removed outright. A person re-added after
+   * being dropped resurrects their old tombstoned row instead of inserting a second one, the same
+   * way [PersonRepository.findOrCreate] resurrects a tombstoned person — the unique index on
+   * (visitId, personId) would otherwise reject the fresh insert.
+   */
+  suspend fun setAttendees(visitId: String, personIds: Set<String>) {
+    val now = clock.nowMillis()
+    val existing = visitDao.attendeesForVisit(visitId)
+    val existingPersonIds = existing.map { it.personId }.toSet()
+
+    existing
+      .filter { it.personId !in personIds }
+      .forEach { visitDao.updateAttendee(it.copy(deletedAt = now, updatedAt = now)) }
+
+    (personIds - existingPersonIds).forEach { personId ->
+      val tombstoned = visitDao.attendeeIncludingDeleted(visitId, personId)
+      if (tombstoned != null) {
+        visitDao.updateAttendee(tombstoned.copy(deletedAt = null, updatedAt = now))
+      } else {
+        visitDao.addAttendee(
+          VisitAttendeeEntity(
+            visitId = visitId,
+            personId = personId,
+            createdAt = now,
+            updatedAt = now,
+          )
+        )
+      }
+    }
+  }
 }

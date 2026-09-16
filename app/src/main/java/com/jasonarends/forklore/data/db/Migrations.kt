@@ -81,3 +81,16 @@ val MIGRATION_1_2: Migration =
       )
     }
   }
+
+/**
+ * Adds the `active_visit_attendees` view backing [ActiveVisitAttendee] (issue #5): purely additive,
+ * no existing table changes, so unlike [MIGRATION_1_2] there is nothing to move or recreate.
+ */
+val MIGRATION_2_3: Migration =
+  object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      db.execSQL(
+        "CREATE VIEW `active_visit_attendees` AS SELECT id, visitId, personId FROM visit_attendees WHERE deletedAt IS NULL"
+      )
+    }
+  }

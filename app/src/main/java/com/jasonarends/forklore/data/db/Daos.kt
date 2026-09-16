@@ -105,6 +105,20 @@ interface VisitDao {
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun addAttendee(attendee: VisitAttendeeEntity)
 
+  @Update suspend fun updateAttendee(attendee: VisitAttendeeEntity)
+
+  @Query("SELECT * FROM visit_attendees WHERE visitId = :visitId AND deletedAt IS NULL")
+  suspend fun attendeesForVisit(visitId: String): List<VisitAttendeeEntity>
+
+  /**
+   * Includes a soft-deleted row: [VisitRepository.setAttendees] resurrects it rather than inserting
+   * a second one, the same tombstone-aware dance as [PersonDao.byNormalizedNameIncludingDeleted] —
+   * the unique index on (visitId, personId) doesn't care that the old row is deleted, only that the
+   * pair already exists.
+   */
+  @Query("SELECT * FROM visit_attendees WHERE visitId = :visitId AND personId = :personId")
+  suspend fun attendeeIncludingDeleted(visitId: String, personId: String): VisitAttendeeEntity?
+
   @Update suspend fun update(visit: VisitEntity)
 
   /**

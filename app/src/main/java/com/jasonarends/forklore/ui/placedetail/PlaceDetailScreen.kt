@@ -2,6 +2,7 @@ package com.jasonarends.forklore.ui.placedetail
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,8 +48,11 @@ fun PlaceDetailScreen(
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
+  visitsViewModel: VisitsViewModel = viewModel(factory = VisitsViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
+  val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
   // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
   // which
   // isn't smart-castable (each read can return a different instance across recompositions), so both
@@ -84,7 +88,27 @@ fun PlaceDetailScreen(
           onRevisitIntentChange = viewModel::updateRevisitIntent,
           onNoteChange = viewModel::updateNote,
           modifier = Modifier.padding(innerPadding),
-        )
+        ) {
+          val visits = (visitsState as? VisitsUiState.Success)?.visits ?: emptyList()
+          val people = (visitsState as? VisitsUiState.Success)?.people ?: emptyList()
+          VisitsSection(
+            visits = visits,
+            people = people,
+            draft = visitDraft,
+            onStartAdd = visitsViewModel::startAdd,
+            onStartEdit = visitsViewModel::startEdit,
+            onCancelDraft = visitsViewModel::cancelDraft,
+            onPrecisionChange = visitsViewModel::onPrecisionChange,
+            onYearChange = visitsViewModel::onYearChange,
+            onMonthChange = visitsViewModel::onMonthChange,
+            onDayChange = visitsViewModel::onDayChange,
+            onMealChange = visitsViewModel::onMealChange,
+            onNoteChange = visitsViewModel::onNoteChange,
+            onAttendeesChange = visitsViewModel::onAttendeesChange,
+            onCreatePerson = visitsViewModel::onCreatePerson,
+            onSaveVisit = visitsViewModel::save,
+          )
+        }
     }
   }
 }
@@ -107,6 +131,10 @@ internal fun PlaceDetail(
   onRevisitIntentChange: (RevisitIntent?) -> Unit,
   onNoteChange: (String) -> Unit,
   modifier: Modifier = Modifier,
+  // A slot rather than Visit-shaped parameters: PlaceDetail stays ignorant of what a Visit is,
+  // and any sibling section (see issue #6's dishes) appends the same way without this composable's
+  // parameter list growing per feature.
+  extraSections: @Composable ColumnScope.() -> Unit = {},
 ) {
   val colors = ForkloreTheme.colors
   Column(
@@ -163,6 +191,8 @@ internal fun PlaceDetail(
       onValueChange = onNoteChange,
       modifier = Modifier.padding(top = 16.dp, bottom = 20.dp),
     )
+
+    extraSections()
   }
 }
 
