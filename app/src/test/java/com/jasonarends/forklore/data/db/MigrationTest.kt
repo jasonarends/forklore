@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** Covers issue #13: dropping `places.note` must not silently discard a place's free text. */
+/** Every migration gets a test here; see each test's own KDoc for the issue it covers. */
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {
   @get:Rule

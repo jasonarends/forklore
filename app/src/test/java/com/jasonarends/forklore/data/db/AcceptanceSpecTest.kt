@@ -370,11 +370,29 @@ class AcceptanceSpecTest {
     assertEquals("Servers are rude\nSERVICE HORRIBLE", db.placeEntryDao().byId(entryId)!!.note)
   }
 
+  // ---- 15. A person is deduped by name, however it's spelled --------------------------
+
+  @Test
+  fun person_findOrCreateDedupesOnNormalizedName() = runTest {
+    // "have Robin get mac and cheese" today and "Val recommends..." tomorrow must not turn one
+    // Val into two people because someone typed a trailing space.
+    val repository = PersonRepository(db.personDao(), Clock { now })
+
+    val first = repository.findOrCreate("Val")
+    val second = repository.findOrCreate("val ")
+
+    assertEquals(first, second)
+    val stored =
+      db.personDao().observeAll().first().filter { it.normalizedName == normalizeDishName("Val") }
+    assertEquals(1, stored.size)
+  }
+
   // ---- 16. A dog policy is a fact about the place, visible from every list -------------
 
   @Test
   fun dogPolicy_setOnAPlace_isVisibleFromEveryListThatIncludesIt() = runTest {
     val placeId = place("Halberd", dogPolicy = DogPolicy.PATIO)
+    val entryInFirstList = placeEntry(placeId)
     val otherList = newId()
     db
       .placeListDao()
@@ -391,8 +409,22 @@ class AcceptanceSpecTest {
       )
 
     // Contrast with rule 6's per-list scoping: dogPolicy lives on the global Place row, so
-    // both lists that include this place see the same answer.
-    assertEquals(DogPolicy.PATIO, db.placeDao().byId(placeId)!!.dogPolicy)
+    // both lists that include this place see the same answer, read through the same relation
+    // the list screens actually use.
+    assertEquals(
+      DogPolicy.PATIO,
+      db
+        .placeEntryDao()
+        .observeForList(listId)
+        .first()
+        .single { it.entry.id == entryInFirstList }
+        .place
+        .dogPolicy,
+    )
+    assertEquals(
+      DogPolicy.PATIO,
+      db.placeEntryDao().observeForList(otherList).first().single().place.dogPolicy,
+    )
   }
 
   // ---- 17. Two authors can disagree about whether a dish arrived hot enough -----------
@@ -411,23 +443,6 @@ class AcceptanceSpecTest {
       opinions.single { it.authorId == ana }.temperature,
     )
     assertEquals(TemperatureRating.LACKING, opinions.single { it.authorId == sam }.temperature)
-  }
-
-  // ---- 15. A person is deduped by name, however it's spelled --------------------------
-
-  @Test
-  fun person_findOrCreateDedupesOnNormalizedName() = runTest {
-    // "have Robin get mac and cheese" today and "Val recommends..." tomorrow must not turn one
-    // Val into two people because someone typed a trailing space.
-    val repository = PersonRepository(db.personDao(), Clock { now })
-
-    val first = repository.findOrCreate("Val")
-    val second = repository.findOrCreate("val ")
-
-    assertEquals(first, second)
-    val stored =
-      db.personDao().observeAll().first().filter { it.normalizedName == normalizeDishName("Val") }
-    assertEquals(1, stored.size)
   }
 
   // ---- Constraints. The expensive-to-change part, so it is asserted too ---------------
