@@ -33,4 +33,14 @@ class Converters {
   @TypeConverter fun mealToName(value: Meal?): String? = value?.name
 
   @TypeConverter fun nameToMeal(value: String?): Meal? = value?.let(Meal::valueOf)
+
+  @TypeConverter fun dogPolicyToName(value: DogPolicy?): String? = value?.name
+
+  @TypeConverter fun nameToDogPolicy(value: String?): DogPolicy? = value?.let(DogPolicy::valueOf)
+
+  @TypeConverter fun temperatureRatingToName(value: TemperatureRating?): String? = value?.name
+
+  @TypeConverter
+  fun nameToTemperatureRating(value: String?): TemperatureRating? =
+    value?.let(TemperatureRating::valueOf)
 }

@@ -387,6 +387,64 @@ class AcceptanceSpecTest {
     assertEquals(1, stored.size)
   }
 
+  // ---- 16. A dog policy is a fact about the place, visible from every list -------------
+
+  @Test
+  fun dogPolicy_setOnAPlace_isVisibleFromEveryListThatIncludesIt() = runTest {
+    val placeId = place("Halberd", dogPolicy = DogPolicy.PATIO)
+    val entryInFirstList = placeEntry(placeId)
+    val otherList = newId()
+    db
+      .placeListDao()
+      .insert(PlaceListEntity(id = otherList, name = "Mine", createdAt = now, updatedAt = now))
+    db
+      .placeEntryDao()
+      .insert(
+        PlaceEntryEntity(
+          placeListId = otherList,
+          placeId = placeId,
+          createdAt = now,
+          updatedAt = now,
+        )
+      )
+
+    // Contrast with rule 6's per-list scoping: dogPolicy lives on the global Place row, so
+    // both lists that include this place see the same answer, read through the same relation
+    // the list screens actually use.
+    assertEquals(
+      DogPolicy.PATIO,
+      db
+        .placeEntryDao()
+        .observeForList(listId)
+        .first()
+        .single { it.entry.id == entryInFirstList }
+        .place
+        .dogPolicy,
+    )
+    assertEquals(
+      DogPolicy.PATIO,
+      db.placeEntryDao().observeForList(otherList).first().single().place.dogPolicy,
+    )
+  }
+
+  // ---- 17. Two authors can disagree about whether a dish arrived hot enough -----------
+
+  @Test
+  fun dishOpinion_keepsBothAuthorsTemperatures_whenTheyDisagree() = runTest {
+    val dishId = dish(placeEntry(place("Cafe Mirabel")), "gazpacho")
+    opinion(dishId, ana, Rating.GOOD, "good", temperature = TemperatureRating.PHENOMENAL)
+    opinion(dishId, sam, Rating.MID, "lukewarm", temperature = TemperatureRating.LACKING)
+
+    val opinions = db.dishOpinionDao().observeForDish(dishId).first()
+
+    assertEquals(2, opinions.size)
+    assertEquals(
+      TemperatureRating.PHENOMENAL,
+      opinions.single { it.authorId == ana }.temperature,
+    )
+    assertEquals(TemperatureRating.LACKING, opinions.single { it.authorId == sam }.temperature)
+  }
+
   // ---- Constraints. The expensive-to-change part, so it is asserted too ---------------
 
   @Test
@@ -547,7 +605,12 @@ class AcceptanceSpecTest {
         )
     }
 
-  private suspend fun place(name: String, branch: String? = null, warning: String? = null): String =
+  private suspend fun place(
+    name: String,
+    branch: String? = null,
+    warning: String? = null,
+    dogPolicy: DogPolicy? = null,
+  ): String =
     newId().also {
       db
         .placeDao()
@@ -557,6 +620,7 @@ class AcceptanceSpecTest {
             name = name,
             branchLabel = branch,
             warning = warning,
+            dogPolicy = dogPolicy,
             createdAt = now,
             updatedAt = now,
           )
@@ -675,6 +739,7 @@ class AcceptanceSpecTest {
     authorId: String,
     rating: Rating,
     note: String,
+    temperature: TemperatureRating? = null,
   ): String =
     newId().also {
       db
@@ -685,6 +750,7 @@ class AcceptanceSpecTest {
             dishId = dishId,
             authorId = authorId,
             rating = rating,
+            temperature = temperature,
             note = note,
             createdAt = now,
             updatedAt = now,

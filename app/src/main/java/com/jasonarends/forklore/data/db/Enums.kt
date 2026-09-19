@@ -59,3 +59,28 @@ enum class Meal {
   DESSERT,
   DRINKS,
 }
+
+/**
+ * Whether a place has a dog patio, allows dogs inside, or neither. A fact about the restaurant (see
+ * [PlaceEntity.dogPolicy]), not one list's opinion of it. `null` means nobody has recorded it,
+ * distinct from [NO].
+ */
+enum class DogPolicy {
+  PATIO,
+  INSIDE,
+  NO,
+}
+
+/**
+ * How well a dish's temperature suited what it was: a correctly-cold gazpacho and a correctly-hot
+ * soup both score [PHENOMENAL]. Deliberately its own enum rather than reusing [Rating] — the
+ * vocabulary is different ([INEDIBLE], [LACKING], [ADEQUATE] don't exist in [Rating]) and a
+ * temperature can't be [Rating.LIFE_CHANGING].
+ */
+enum class TemperatureRating {
+  INEDIBLE,
+  LACKING,
+  MID,
+  ADEQUATE,
+  PHENOMENAL,
+}

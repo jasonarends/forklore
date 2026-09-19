@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** Covers issue #13: dropping `places.note` must not silently discard a place's free text. */
+/** Every migration gets a test here; see each test's own KDoc for the issue it covers. */
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {
   @get:Rule
@@ -161,6 +161,46 @@ class MigrationTest {
       ->
       val personIds = generateSequence { if (cursor.moveToNext()) cursor.getString(0) else null }
       assertEquals(setOf("bo"), personIds.toSet())
+    }
+  }
+
+  /** Covers issue #21: both new columns are additive and must arrive null on existing rows. */
+  @Test
+  fun migrate3To4_addsDogPolicyAndTemperatureColumns_nullOnExistingRows() {
+    helper.createDatabase(TEST_DB, 3).use { db ->
+      db.execSQL(
+        "INSERT INTO place_lists (id, name, createdAt, updatedAt) VALUES ('list-1', 'Ours', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO places (id, name, createdAt, updatedAt) VALUES ('place-1', 'Halberd', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO place_entries (id, placeListId, placeId, status, note, createdAt, updatedAt) " +
+          "VALUES ('entry-1', 'list-1', 'place-1', 'WANT', '', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO people (id, name, normalizedName, isHouseholdMember, note, createdAt, updatedAt) " +
+          "VALUES ('ana', 'Ana', 'ana', 1, '', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO dishes (id, placeEntryId, canonicalName, normalizedName, note, createdAt, updatedAt) " +
+          "VALUES ('dish-1', 'entry-1', 'Arancini', 'arancini', '', $now, $now)"
+      )
+      db.execSQL(
+        "INSERT INTO dish_opinions (id, dishId, authorId, rating, note, createdAt, updatedAt) " +
+          "VALUES ('opinion-1', 'dish-1', 'ana', 'BAD', 'bad', $now, $now)"
+      )
+    }
+
+    val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, MIGRATION_3_4)
+
+    db.query("SELECT dogPolicy FROM places WHERE id = 'place-1'").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertTrue(cursor.isNull(0))
+    }
+    db.query("SELECT temperature FROM dish_opinions WHERE id = 'opinion-1'").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertTrue(cursor.isNull(0))
     }
   }
 
