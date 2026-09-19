@@ -94,7 +94,7 @@ fun PersonPicker(
       OutlinedTextField(
         value = newName,
         onValueChange = { newName = it },
-        modifier = Modifier.testTag("person-picker-new-name"),
+        modifier = Modifier.weight(1f).testTag("person-picker-new-name"),
         label = { Text("Add a person") },
         singleLine = true,
       )
