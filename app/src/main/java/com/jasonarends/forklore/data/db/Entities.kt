@@ -74,6 +74,8 @@ data class PlaceEntity(
   val providerFetchedAt: Long? = null,
   /** Pricing or policy gotchas: "$27 per person even if you order one thing". */
   val warning: String? = null,
+  /** "Do they have a dog patio?" A fact about the restaurant; null means nobody has recorded it. */
+  val dogPolicy: DogPolicy? = null,
   val createdAt: Long,
   val updatedAt: Long,
   val deletedAt: Long? = null,
@@ -259,6 +261,8 @@ data class DishOpinionEntity(
   val authorId: String,
   val visitId: String? = null,
   val rating: Rating? = null,
+  /** Rated for suitability, not absolute heat: a correctly-cold gazpacho scores just as well. */
+  val temperature: TemperatureRating? = null,
   val note: String = "",
   val createdAt: Long,
   val updatedAt: Long,

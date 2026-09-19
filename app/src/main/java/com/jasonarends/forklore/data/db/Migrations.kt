@@ -94,3 +94,16 @@ val MIGRATION_2_3: Migration =
       )
     }
   }
+
+/**
+ * Adds `places.dogPolicy` and `dish_opinions.temperature` (issue #21). Both are nullable `ALTER
+ * TABLE ... ADD COLUMN`, which every SQLite version this app supports handles directly — unlike
+ * [MIGRATION_1_2]'s column drop, there is no table recreate here.
+ */
+val MIGRATION_3_4: Migration =
+  object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      db.execSQL("ALTER TABLE `places` ADD COLUMN `dogPolicy` TEXT DEFAULT NULL")
+      db.execSQL("ALTER TABLE `dish_opinions` ADD COLUMN `temperature` TEXT DEFAULT NULL")
+    }
+  }
