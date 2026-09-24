@@ -64,6 +64,8 @@ fun PlaceDetailScreen(
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
   dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
   visitsViewModel: VisitsViewModel = viewModel(factory = VisitsViewModel.factory(placeEntryId)),
+  opinionsViewModel: DishOpinionsViewModel =
+    viewModel(factory = DishOpinionsViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
@@ -98,6 +100,8 @@ fun PlaceDetailScreen(
         val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
         val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
         val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
+        val opinionsState by opinionsViewModel.uiState.collectAsStateWithLifecycle()
+        val opinionDraft by opinionsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
           onStatusChange = viewModel::updateStatus,
@@ -141,6 +145,24 @@ fun PlaceDetailScreen(
               onQueryChange = dishesViewModel::onQueryChange,
               onAddDish = dishesViewModel::addDish,
               onAddAlias = dishesViewModel::addAlias,
+              opinionsContent = { dishId ->
+                DishOpinionsBlock(
+                  dishId = dishId,
+                  state = opinionsState,
+                  draft = opinionDraft,
+                  onStartAdd = opinionsViewModel::startAdd,
+                  onStartEdit = opinionsViewModel::startEdit,
+                  onCancelDraft = opinionsViewModel::cancelDraft,
+                  onAuthorChange = opinionsViewModel::onAuthorChange,
+                  onRatingChange = opinionsViewModel::onRatingChange,
+                  onTemperatureChange = opinionsViewModel::onTemperatureChange,
+                  onNoteChange = opinionsViewModel::onNoteChange,
+                  onVisitChange = opinionsViewModel::onVisitChange,
+                  onCreatePerson = opinionsViewModel::onCreatePerson,
+                  onSave = opinionsViewModel::save,
+                  onDelete = opinionsViewModel::delete,
+                )
+              },
             )
           },
           modifier = Modifier.padding(innerPadding),
@@ -243,8 +265,10 @@ internal fun PlaceDetail(
 /**
  * Every dish recorded at this place entry, plus the field that adds one. `internal` (not `private`)
  * so tests can exercise it directly rather than through the whole [PlaceDetail] column. [DishRow]'s
- * name row leaves a trailing slot for issue #7's per-dish status chip, and space below it for
- * issue #8's opinion cards — neither is wired in yet.
+ * name row leaves a trailing slot for issue #7's per-dish status chip; [opinionsContent] fills the
+ * space below it with issue #8's opinion cards. It's a slot keyed by dish id rather than
+ * opinion-shaped parameters, so this composable stays ignorant of what an opinion is. Required, not
+ * defaulted, for the same reason as [PlaceDetail]'s sections.
  */
 @Composable
 internal fun DishesSection(
@@ -254,6 +278,7 @@ internal fun DishesSection(
   onQueryChange: (String) -> Unit,
   onAddDish: (String) -> Unit,
   onAddAlias: (dishId: String, alias: String) -> Unit,
+  opinionsContent: @Composable (dishId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -275,6 +300,7 @@ internal fun DishesSection(
               DishRow(
                 dish = dish,
                 onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
+                opinions = { opinionsContent(dish.dish.id) },
                 modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
               )
             }
@@ -301,6 +327,7 @@ internal fun DishesSection(
 private fun DishRow(
   dish: DishWithAliases,
   onAddAlias: (String) -> Unit,
+  opinions: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -316,6 +343,7 @@ private fun DishRow(
         modifier = Modifier.padding(top = 2.dp),
       )
     }
+    opinions()
     AliasEntry(onAdd = onAddAlias, modifier = Modifier.padding(top = 6.dp))
   }
 }
@@ -499,6 +527,7 @@ private fun PlaceDetailPopulatedPreview() {
             onQueryChange = {},
             onAddDish = {},
             onAddAlias = { _, _ -> },
+            opinionsContent = {},
           )
         },
       )
@@ -538,6 +567,7 @@ private fun PlaceDetailEmptyPreview() {
             onQueryChange = {},
             onAddDish = {},
             onAddAlias = { _, _ -> },
+            opinionsContent = {},
           )
         },
       )
