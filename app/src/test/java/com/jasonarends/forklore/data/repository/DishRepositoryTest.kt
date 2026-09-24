@@ -3,9 +3,13 @@ package com.jasonarends.forklore.data.repository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.jasonarends.forklore.data.db.ForkloreDatabase
+import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceListEntity
+import com.jasonarends.forklore.data.db.Rating
+import com.jasonarends.forklore.data.db.TemperatureRating
+import com.jasonarends.forklore.data.db.VisitEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -171,5 +176,260 @@ class DishRepositoryTest {
     repository.addAlias(dishId, placeEntryId, "burnt ends")
 
     assertEquals(0, db.dishDao().observeForPlaceEntry(placeEntryId).first().single().aliases.size)
+  }
+
+  // ---- Opinions (issue #8) ------------------------------------------------------------
+
+  private suspend fun person(id: String, name: String) =
+    db
+      .personDao()
+      .insert(
+        PersonEntity(
+          id = id,
+          name = name,
+          normalizedName = name.lowercase(),
+          createdAt = 0,
+          updatedAt = 0,
+        )
+      )
+
+  private suspend fun visit(id: String, entryId: String = placeEntryId) =
+    db.visitDao().insert(VisitEntity(id = id, placeEntryId = entryId, createdAt = 0, updatedAt = 0))
+
+  private suspend fun otherPlaceEntry(): String {
+    db.placeDao().insert(PlaceEntity(id = "place2", name = "Verano", createdAt = 0, updatedAt = 0))
+    db
+      .placeEntryDao()
+      .insert(
+        PlaceEntryEntity(
+          id = "entry2",
+          placeListId = "list",
+          placeId = "place2",
+          createdAt = 0,
+          updatedAt = 0,
+        )
+      )
+    return "entry2"
+  }
+
+  @Test
+  fun recordOpinion_twoAuthorsOfOneDish_bothSurviveWithTheirOwnRatingAndTemperature() = runTest {
+    person("ana", "Ana")
+    person("sam", "Sam")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+
+    repository.recordOpinion(
+      dishId,
+      "ana",
+      Rating.BAD,
+      note = "Skip these.",
+      temperature = TemperatureRating.LACKING,
+    )
+    repository.recordOpinion(
+      dishId,
+      "sam",
+      Rating.MID,
+      note = "They were fine.",
+      temperature = TemperatureRating.ADEQUATE,
+    )
+
+    val opinions = db.dishOpinionDao().observeForDish(dishId).first()
+    assertEquals(2, opinions.size)
+    val ana = opinions.single { it.authorId == "ana" }
+    val sam = opinions.single { it.authorId == "sam" }
+    assertEquals(Rating.BAD, ana.rating)
+    assertEquals(TemperatureRating.LACKING, ana.temperature)
+    assertEquals("Skip these.", ana.note)
+    assertEquals(Rating.MID, sam.rating)
+    assertEquals(TemperatureRating.ADEQUATE, sam.temperature)
+    assertEquals("They were fine.", sam.note)
+  }
+
+  @Test
+  fun recordOpinion_aNoteAloneIsACompleteOpinion() = runTest {
+    person("ana", "Ana")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+
+    repository.recordOpinion(dishId, "ana", rating = null, note = "Too greasy for us.")
+
+    val opinion = db.dishOpinionDao().observeForDish(dishId).first().single()
+    assertEquals(null, opinion.rating)
+    assertEquals(null, opinion.temperature)
+    assertEquals("Too greasy for us.", opinion.note)
+  }
+
+  @Test
+  fun recordOpinion_sameAuthorTwice_keepsBothRows() = runTest {
+    person("ana", "Ana")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+
+    repository.recordOpinion(dishId, "ana", Rating.BAD)
+    repository.recordOpinion(dishId, "ana", Rating.GOOD, note = "Better the second time.")
+
+    assertEquals(2, db.dishOpinionDao().observeForDish(dishId).first().size)
+  }
+
+  @Test
+  fun recordOpinion_linksAVisitAtTheSamePlaceEntry() = runTest {
+    person("ana", "Ana")
+    visit("v1")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+
+    repository.recordOpinion(dishId, "ana", Rating.GOOD, visitId = "v1")
+
+    assertEquals("v1", db.dishOpinionDao().observeForDish(dishId).first().single().visitId)
+  }
+
+  @Test
+  fun recordOpinion_rejectsAVisitFromAnotherPlaceEntry_andWritesNothing() = runTest {
+    person("ana", "Ana")
+    val otherEntry = otherPlaceEntry()
+    visit("elsewhere", entryId = otherEntry)
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+
+    val failure = runCatching {
+      repository.recordOpinion(dishId, "ana", Rating.GOOD, visitId = "elsewhere")
+    }
+
+    assertTrue(failure.exceptionOrNull() is IllegalArgumentException)
+    assertEquals(0, db.dishOpinionDao().observeForDish(dishId).first().size)
+  }
+
+  @Test
+  fun updateOpinion_rewritesTheFields_stampsUpdatedAt_andLeavesTheOtherAuthorAlone() = runTest {
+    person("ana", "Ana")
+    person("sam", "Sam")
+    visit("v1")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+    now = 1_000L
+    val anaId = repository.recordOpinion(dishId, "ana", Rating.BAD, note = "Skip these.")
+    val samId = repository.recordOpinion(dishId, "sam", Rating.MID, note = "Fine.")
+
+    now = 5_000L
+    repository.updateOpinion(
+      opinionId = anaId,
+      authorId = "ana",
+      rating = Rating.FINE,
+      temperature = TemperatureRating.MID,
+      note = "Okay on a second look.",
+      visitId = "v1",
+    )
+
+    val opinions = db.dishOpinionDao().observeForDish(dishId).first()
+    val ana = opinions.single { it.id == anaId }
+    assertEquals(Rating.FINE, ana.rating)
+    assertEquals(TemperatureRating.MID, ana.temperature)
+    assertEquals("Okay on a second look.", ana.note)
+    assertEquals("v1", ana.visitId)
+    assertEquals(1_000L, ana.createdAt)
+    assertEquals(5_000L, ana.updatedAt)
+    val sam = opinions.single { it.id == samId }
+    assertEquals(Rating.MID, sam.rating)
+    assertEquals("Fine.", sam.note)
+    assertEquals(1_000L, sam.updatedAt)
+  }
+
+  @Test
+  fun updateOpinion_canClearTheRatingTemperatureAndVisit() = runTest {
+    person("ana", "Ana")
+    visit("v1")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+    val id =
+      repository.recordOpinion(
+        dishId,
+        "ana",
+        Rating.GOOD,
+        note = "keep",
+        visitId = "v1",
+        temperature = TemperatureRating.PHENOMENAL,
+      )
+
+    repository.updateOpinion(id, "ana", null, null, "keep", null)
+
+    val opinion = db.dishOpinionDao().observeForDish(dishId).first().single()
+    assertEquals(null, opinion.rating)
+    assertEquals(null, opinion.temperature)
+    assertEquals(null, opinion.visitId)
+    assertEquals("keep", opinion.note)
+  }
+
+  @Test
+  fun updateOpinion_stillWorks_afterItsLinkedVisitWasSoftDeleted() = runTest {
+    person("ana", "Ana")
+    visit("v1")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+    val id = repository.recordOpinion(dishId, "ana", Rating.GOOD, visitId = "v1")
+    val gone = db.visitDao().byId("v1")!!
+    db.visitDao().update(gone.copy(deletedAt = 1L))
+
+    repository.updateOpinion(id, "ana", Rating.GOOD, null, "edited after the visit went", "v1")
+
+    val opinion = db.dishOpinionDao().observeForDish(dishId).first().single()
+    assertEquals("edited after the visit went", opinion.note)
+  }
+
+  @Test
+  fun updateOpinion_rejectsANewLinkToAVisitAtAnotherPlaceEntry() = runTest {
+    person("ana", "Ana")
+    val otherEntry = otherPlaceEntry()
+    visit("elsewhere", entryId = otherEntry)
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+    val id = repository.recordOpinion(dishId, "ana", Rating.GOOD)
+
+    val failure = runCatching {
+      repository.updateOpinion(id, "ana", Rating.GOOD, null, "", "elsewhere")
+    }
+
+    assertTrue(failure.exceptionOrNull() is IllegalArgumentException)
+    assertEquals(null, db.dishOpinionDao().observeForDish(dishId).first().single().visitId)
+  }
+
+  @Test
+  fun updateOpinion_onAMissingOpinion_isANoOp() = runTest {
+    person("ana", "Ana")
+
+    repository.updateOpinion("nope", "ana", Rating.GOOD, null, "", null)
+
+    assertEquals(0, db.dishOpinionDao().observeForPlaceEntry(placeEntryId).first().size)
+  }
+
+  @Test
+  fun deleteOpinion_tombstonesTheRow_ratherThanRemovingIt() = runTest {
+    person("ana", "Ana")
+    person("sam", "Sam")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+    val anaId = repository.recordOpinion(dishId, "ana", Rating.BAD)
+    repository.recordOpinion(dishId, "sam", Rating.FINE)
+
+    now = 9_000L
+    repository.deleteOpinion(anaId)
+
+    val tombstone = db.dishOpinionDao().byId(anaId)
+    assertEquals(9_000L, tombstone?.deletedAt)
+    assertEquals(9_000L, tombstone?.updatedAt)
+    assertEquals(
+      listOf("sam"),
+      repository.observeOpinionsForPlaceEntry(placeEntryId).first().map { it.authorId },
+    )
+  }
+
+  @Test
+  fun observeOpinionsForPlaceEntry_onlyReturnsThisEntrysOpinions_oldestFirst() = runTest {
+    person("ana", "Ana")
+    person("sam", "Sam")
+    val otherEntry = otherPlaceEntry()
+    val here = repository.findOrCreateDish(placeEntryId, "Arancini")
+    val there = repository.findOrCreateDish(otherEntry, "Arancini")
+    now = 100L
+    repository.recordOpinion(here, "sam", Rating.FINE)
+    now = 200L
+    repository.recordOpinion(there, "ana", Rating.PHENOMENAL, note = "the other list's writing")
+    now = 50L
+    repository.recordOpinion(here, "ana", Rating.BAD)
+
+    val opinions = repository.observeOpinionsForPlaceEntry(placeEntryId).first()
+
+    assertEquals(listOf("ana", "sam"), opinions.map { it.authorId })
+    assertTrue(opinions.none { it.note == "the other list's writing" })
   }
 }

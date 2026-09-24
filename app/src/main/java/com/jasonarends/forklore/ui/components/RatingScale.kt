@@ -74,26 +74,50 @@ fun RatingPicker(
   onRatingChange: (Rating?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  RampPicker(
+    options = Rating.entries,
+    selected = rating,
+    onSelectionChange = onRatingChange,
+    label = { it.label },
+    style = { it.ratingStyle() },
+    modifier = modifier,
+  )
+}
+
+/**
+ * The escalating-type picker [RatingPicker] and [TemperaturePicker] share: every option visible at
+ * once, styled by [style], the selected one circled, tapping it again clears it. Kept generic so
+ * the two scales can't drift apart in how they behave, only in their vocabulary.
+ */
+@Composable
+internal fun <T> RampPicker(
+  options: List<T>,
+  selected: T?,
+  onSelectionChange: (T?) -> Unit,
+  label: (T) -> String,
+  style: @Composable (T) -> Pair<TextStyle, Color>,
+  modifier: Modifier = Modifier,
+) {
   val stampColor = ForkloreTheme.colors.stamp
   FlowRow(
     modifier = modifier.selectableGroup(),
     horizontalArrangement = Arrangement.spacedBy(10.dp),
     verticalArrangement = Arrangement.spacedBy(6.dp),
   ) {
-    Rating.entries.forEach { option ->
-      val isSelected = option == rating
-      val (style, color) = option.ratingStyle()
+    options.forEach { option ->
+      val isSelected = option == selected
+      val (textStyle, color) = style(option)
       Text(
-        text = option.label,
+        text = label(option),
         modifier =
           Modifier.minimumInteractiveComponentSize()
             .selectable(
               selected = isSelected,
-              onClick = { onRatingChange(option.takeUnless { it == rating }) },
+              onClick = { onSelectionChange(option.takeUnless { it == selected }) },
               role = Role.RadioButton,
             )
             .then(if (isSelected) Modifier.circledSelection(stampColor) else Modifier),
-        style = style,
+        style = textStyle,
         color = color,
       )
     }
@@ -125,16 +149,26 @@ internal val Rating.emphasis: RatingEmphasis
  */
 @Composable
 fun RatingLabel(rating: Rating, modifier: Modifier = Modifier) {
+  RampLabel(text = rating.label, emphasis = rating.emphasis, modifier = modifier)
+}
+
+/** The read-only word for one step of a ramp, shared by [RatingLabel] and [TemperatureLabel]. */
+@Composable
+internal fun RampLabel(
+  text: String,
+  emphasis: RatingEmphasis,
+  modifier: Modifier = Modifier,
+  style: TextStyle = ForkloreType.inlineRating,
+) {
   val colors = ForkloreTheme.colors
-  val emphasis = rating.emphasis
   Text(
-    text = rating.label,
+    text = text,
     modifier = modifier,
     style =
       if (emphasis == RatingEmphasis.Strong) {
-        ForkloreType.inlineRating.copy(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
+        style.copy(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
       } else {
-        ForkloreType.inlineRating
+        style
       },
     color =
       when (emphasis) {

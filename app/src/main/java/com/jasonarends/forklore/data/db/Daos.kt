@@ -222,8 +222,36 @@ interface DishOpinionDao {
 
   @Update suspend fun update(opinion: DishOpinionEntity)
 
+  @Query("SELECT * FROM dish_opinions WHERE id = :id")
+  suspend fun byId(id: String): DishOpinionEntity?
+
   @Query(
     "SELECT * FROM dish_opinions WHERE dishId = :dishId AND deletedAt IS NULL ORDER BY createdAt"
   )
   fun observeForDish(dishId: String): Flow<List<DishOpinionEntity>>
+
+  /**
+   * Every live opinion on every live dish at one place entry, oldest first, so the dish screen gets
+   * all its cards in one query rather than one per dish. Filters `deletedAt` itself: going through
+   * [DishWithOpinions]'s `@Relation` would return tombstoned opinions, which a `@Relation` has no
+   * way to exclude. Ties on `createdAt` break on `id` so card order never shuffles between
+   * emissions.
+   */
+  @Query(
+    "SELECT o.* FROM dish_opinions o JOIN dishes d ON d.id = o.dishId " +
+      "WHERE d.placeEntryId = :placeEntryId AND o.deletedAt IS NULL AND d.deletedAt IS NULL " +
+      "ORDER BY o.createdAt, o.id"
+  )
+  fun observeForPlaceEntry(placeEntryId: String): Flow<List<DishOpinionEntity>>
+
+  /**
+   * Whether [visitId] is a live visit at the same place entry as [dishId]. An opinion may cite the
+   * visit it came from, but only one of *this* entry's — a visit at another entry (or another
+   * list's copy of the same restaurant) would leak that list's writing across the privacy boundary.
+   */
+  @Query(
+    "SELECT COUNT(*) FROM visits v JOIN dishes d ON d.placeEntryId = v.placeEntryId " +
+      "WHERE v.id = :visitId AND d.id = :dishId AND v.deletedAt IS NULL"
+  )
+  suspend fun countVisitAtDishsEntry(dishId: String, visitId: String): Int
 }
