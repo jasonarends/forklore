@@ -2,6 +2,7 @@ package com.jasonarends.forklore.ui.addplace
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceListEntity
 import com.jasonarends.forklore.data.db.newId
@@ -146,6 +147,45 @@ class AddPlaceViewModelTest {
     assertFalse(viewModel.uiState.value.saving)
     assertFalse(viewModel.uiState.value.saved)
     assertFalse(viewModel.placeListReady.value)
+  }
+
+  @Test
+  fun save_writesTheChosenDogPolicy_toThePlace() {
+    val viewModel = AddPlaceViewModel(repository, MutableStateFlow(listId))
+    viewModel.onNameChange("Halberd")
+    viewModel.onDogPolicyChange(DogPolicy.PATIO)
+
+    viewModel.save()
+    waitUntil(viewModel) { it.saved }
+
+    val saved = runBlocking { repository.observeList(listId).first() }.single()
+    assertEquals(DogPolicy.PATIO, saved.place.dogPolicy)
+  }
+
+  @Test
+  fun save_leavesDogPolicyNotRecorded_unlessOneWasChosen() {
+    val viewModel = AddPlaceViewModel(repository, MutableStateFlow(listId))
+    viewModel.onNameChange("Halberd")
+
+    viewModel.save()
+    waitUntil(viewModel) { it.saved }
+
+    val saved = runBlocking { repository.observeList(listId).first() }.single()
+    assertNull(saved.place.dogPolicy)
+  }
+
+  @Test
+  fun choosingNotRecordedAgain_clearsAnEarlierDogPolicyChoice() {
+    val viewModel = AddPlaceViewModel(repository, MutableStateFlow(listId))
+    viewModel.onNameChange("Halberd")
+    viewModel.onDogPolicyChange(DogPolicy.INSIDE)
+    viewModel.onDogPolicyChange(null)
+
+    viewModel.save()
+    waitUntil(viewModel) { it.saved }
+
+    val saved = runBlocking { repository.observeList(listId).first() }.single()
+    assertNull(saved.place.dogPolicy)
   }
 
   private fun entriesInList(): List<*> = runBlocking { repository.observeList(listId).first() }

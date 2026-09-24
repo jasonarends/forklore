@@ -1,5 +1,9 @@
 package com.jasonarends.forklore.ui.placedetail
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
@@ -13,6 +17,7 @@ import androidx.compose.ui.test.performTextInput
 import com.jasonarends.forklore.data.db.DishAliasEntity
 import com.jasonarends.forklore.data.db.DishEntity
 import com.jasonarends.forklore.data.db.DishWithAliases
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
@@ -36,6 +41,7 @@ class PlaceDetailScreenTest {
       ForkloreTheme {
         PlaceDetail(
           entry = entry("Halberd"),
+          onDogPolicyChange = {},
           onStatusChange = {},
           onFoodRatingChange = {},
           onServiceRatingChange = {},
@@ -83,6 +89,7 @@ class PlaceDetailScreenTest {
                 ),
               place = place,
             ),
+          onDogPolicyChange = {},
           onStatusChange = {},
           onFoodRatingChange = {},
           onServiceRatingChange = {},
@@ -117,6 +124,7 @@ class PlaceDetailScreenTest {
       ForkloreTheme {
         PlaceDetail(
           entry = entry("Halberd"),
+          onDogPolicyChange = {},
           onStatusChange = {},
           onFoodRatingChange = {},
           onServiceRatingChange = {},
@@ -149,6 +157,7 @@ class PlaceDetailScreenTest {
       ForkloreTheme {
         PlaceDetail(
           entry = entry("Halberd"),
+          onDogPolicyChange = {},
           onStatusChange = {},
           onFoodRatingChange = {},
           onServiceRatingChange = {},
@@ -184,6 +193,7 @@ class PlaceDetailScreenTest {
       ForkloreTheme {
         PlaceDetail(
           entry = entry("Halberd"),
+          onDogPolicyChange = {},
           onStatusChange = {},
           onFoodRatingChange = { foodRating = it },
           onServiceRatingChange = { serviceRating = it },
@@ -199,6 +209,76 @@ class PlaceDetailScreenTest {
 
     assertEquals(Rating.LIFE_CHANGING, foodRating)
     assertEquals(null, serviceRating)
+  }
+
+  /**
+   * The primary path for #22, hoisted the way the real screen does it: the ViewModel writes Room
+   * and the new value flows back in as state, so each tap must both report the choice and, once fed
+   * back, show it selected. "Not recorded" is a chip of its own, so clearing is one tap.
+   */
+  @Test
+  fun dogPolicy_canBeSet_changed_andClearedBackToNotRecorded() {
+    var place by mutableStateOf(PlaceEntity(name = "Halberd", createdAt = 0, updatedAt = 0))
+    val reported = mutableListOf<DogPolicy?>()
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry(place),
+          onDogPolicyChange = {
+            reported += it
+            place = place.copy(dogPolicy = it)
+          },
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+          visitsSection = {},
+          dishesSection = {},
+        )
+      }
+    }
+    fun chip(label: String) =
+      compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag("dog-policy")))
+
+    chip("Not recorded").assertIsSelected()
+
+    chip("Dog patio").performClick()
+    chip("Dog patio").assertIsSelected()
+    chip("Not recorded").assertIsNotSelected()
+
+    chip("No dogs").performClick()
+    chip("No dogs").assertIsSelected()
+    chip("Dog patio").assertIsNotSelected()
+
+    chip("Not recorded").performClick()
+    chip("Not recorded").assertIsSelected()
+    chip("No dogs").assertIsNotSelected()
+
+    assertEquals(listOf(DogPolicy.PATIO, DogPolicy.NO, null), reported)
+  }
+
+  @Test
+  fun aPlaceWithNoDogPolicy_showsNotRecordedSelected_andNoDogAnswerSelected() {
+    compose.setContent {
+      ForkloreTheme {
+        PlaceDetail(
+          entry = entry("Halberd"),
+          onDogPolicyChange = {},
+          onStatusChange = {},
+          onFoodRatingChange = {},
+          onServiceRatingChange = {},
+          onRevisitIntentChange = {},
+          onNoteChange = {},
+          visitsSection = {},
+          dishesSection = {},
+        )
+      }
+    }
+
+    compose.onNode(hasText("Not recorded")).assertIsSelected()
+    // Null is not NO: an unanswered place must not read as "no dogs".
+    compose.onNode(hasText("No dogs")).assertIsNotSelected()
   }
 
   @Test
@@ -314,8 +394,13 @@ class PlaceDetailScreenTest {
     )
   }
 
-  private fun entry(name: String, status: PlaceStatus = PlaceStatus.WANT): PlaceEntryWithPlace {
-    val place = PlaceEntity(name = name, createdAt = 0, updatedAt = 0)
+  private fun entry(name: String, status: PlaceStatus = PlaceStatus.WANT): PlaceEntryWithPlace =
+    entry(PlaceEntity(name = name, createdAt = 0, updatedAt = 0), status)
+
+  private fun entry(
+    place: PlaceEntity,
+    status: PlaceStatus = PlaceStatus.WANT,
+  ): PlaceEntryWithPlace {
     return PlaceEntryWithPlace(
       entry =
         PlaceEntryEntity(

@@ -33,12 +33,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jasonarends.forklore.data.db.DishAliasEntity
 import com.jasonarends.forklore.data.db.DishEntity
 import com.jasonarends.forklore.data.db.DishWithAliases
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
+import com.jasonarends.forklore.ui.components.DogPolicyPicker
 import com.jasonarends.forklore.ui.components.EmptyState
 import com.jasonarends.forklore.ui.components.LedgerChip
 import com.jasonarends.forklore.ui.components.LedgerGlyph
@@ -100,6 +102,7 @@ fun PlaceDetailScreen(
         val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
+          onDogPolicyChange = viewModel::updateDogPolicy,
           onStatusChange = viewModel::updateStatus,
           onFoodRatingChange = viewModel::updateFoodRating,
           onServiceRatingChange = viewModel::updateServiceRating,
@@ -162,6 +165,7 @@ fun PlaceDetailScreen(
 @Composable
 internal fun PlaceDetail(
   entry: PlaceEntryWithPlace,
+  onDogPolicyChange: (DogPolicy?) -> Unit,
   onStatusChange: (PlaceStatus) -> Unit,
   onFoodRatingChange: (Rating?) -> Unit,
   onServiceRatingChange: (Rating?) -> Unit,
@@ -199,6 +203,16 @@ internal fun PlaceDetail(
       )
     }
     entry.place.warning?.let { warning -> WarningCard(warning) }
+
+    // Right after the warning: both are facts about the restaurant, ahead of the sections below
+    // that record this list's own verdicts. testTag keeps tests from confusing these chips with
+    // the status picker's.
+    SectionHeader("Dogs")
+    DogPolicyPicker(
+      dogPolicy = entry.place.dogPolicy,
+      onDogPolicyChange = onDogPolicyChange,
+      modifier = Modifier.testTag("dog-policy"),
+    )
 
     SectionHeader("Status")
     PlaceStatusPicker(status = entry.entry.status, onStatusChange = onStatusChange)
@@ -461,6 +475,7 @@ private fun PlaceDetailPopulatedPreview() {
               ),
             place = place,
           ),
+        onDogPolicyChange = {},
         onStatusChange = {},
         onFoodRatingChange = {},
         onServiceRatingChange = {},
@@ -524,6 +539,7 @@ private fun PlaceDetailEmptyPreview() {
               ),
             place = place,
           ),
+        onDogPolicyChange = {},
         onStatusChange = {},
         onFoodRatingChange = {},
         onServiceRatingChange = {},

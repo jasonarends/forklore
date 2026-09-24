@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jasonarends.forklore.ForkloreApp
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.data.db.PlaceStatus
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -80,6 +82,18 @@ class PlaceDetailViewModel(
   fun updateServiceRating(rating: Rating?) = update { it.copy(serviceRating = rating) }
 
   fun updateRevisitIntent(intent: RevisitIntent?) = update { it.copy(revisitIntent = intent) }
+
+  /**
+   * Writes the place, not the entry: dog policy is a fact about the restaurant (see
+   * [PlaceRepository.addPlace]), so every list that includes it sees the change. The place id is
+   * read from Room rather than the UI state so this doesn't depend on anyone collecting [uiState].
+   */
+  fun updateDogPolicy(dogPolicy: DogPolicy?) {
+    viewModelScope.launch {
+      val placeId = placeRepository.observeEntry(placeEntryId).first()?.place?.id ?: return@launch
+      placeRepository.setDogPolicy(placeId, dogPolicy)
+    }
+  }
 
   /**
    * Debounced rather than written on every keystroke, since nobody reads a note mid-keystroke. Runs

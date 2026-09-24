@@ -2,9 +2,12 @@ package com.jasonarends.forklore.ui.placelist
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
@@ -48,6 +51,32 @@ class PlaceListTest {
     composeTestRule.onNodeWithText("Avoid").assertExists()
     composeTestRule.onAllNodesWithText("Food:").assertCountEquals(1)
     composeTestRule.onNodeWithText("Excellent").assertExists()
+  }
+
+  @Test
+  fun aPawMarksPlacesThatAllowDogs_andNothingMarksTheRest() {
+    composeTestRule.setContent {
+      ForkloreTheme {
+        PlaceList(
+          entries =
+            listOf(
+              entry("Halberd", dogPolicy = DogPolicy.PATIO),
+              entry("Aioe", dogPolicy = DogPolicy.INSIDE),
+              entry("Brannock", dogPolicy = DogPolicy.NO),
+              entry("Fifth Avenue"),
+            ),
+          onAddPlace = {},
+          onPlaceClick = {},
+        )
+      }
+    }
+
+    // One paw each for PATIO and INSIDE, spoken differently; NO and not-recorded show nothing.
+    composeTestRule.onNodeWithContentDescription("Dog patio").assertExists()
+    composeTestRule.onNodeWithContentDescription("Dogs inside").assertExists()
+    composeTestRule.onAllNodesWithContentDescription("No dogs").assertCountEquals(0)
+    composeTestRule.onNodeWithText("Brannock").assertExists()
+    composeTestRule.onNodeWithText("Fifth Avenue").assertExists()
   }
 
   @Test
@@ -97,8 +126,16 @@ class PlaceListTest {
     branch: String? = null,
     status: PlaceStatus = PlaceStatus.WANT,
     foodRating: Rating? = null,
+    dogPolicy: DogPolicy? = null,
   ): PlaceEntryWithPlace {
-    val place = PlaceEntity(name = name, branchLabel = branch, createdAt = 0, updatedAt = 0)
+    val place =
+      PlaceEntity(
+        name = name,
+        branchLabel = branch,
+        dogPolicy = dogPolicy,
+        createdAt = 0,
+        updatedAt = 0,
+      )
     return PlaceEntryWithPlace(
       entry =
         PlaceEntryEntity(
