@@ -124,7 +124,7 @@ class PlaceDetailViewModelTest {
       backgroundScope.launch { viewModel.uiState.collect {} }
 
       for (policy in listOf(DogPolicy.PATIO, DogPolicy.NO, null)) {
-        viewModel.updateDogPolicy(policy)
+        viewModel.updateDogPolicy("place", policy)
         advanceUntilIdle()
 
         // Read back from Room, and off the Place row: dog policy is the restaurant's, not the
@@ -143,7 +143,7 @@ class PlaceDetailViewModelTest {
       viewModel.updateStatus(PlaceStatus.VISITED)
       advanceUntilIdle()
 
-      viewModel.updateDogPolicy(DogPolicy.INSIDE)
+      viewModel.updateDogPolicy("place", DogPolicy.INSIDE)
       advanceUntilIdle()
 
       assertEquals(PlaceStatus.VISITED, db.placeEntryDao().byId(entryId)!!.status)

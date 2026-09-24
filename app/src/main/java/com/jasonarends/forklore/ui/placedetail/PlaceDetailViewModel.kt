@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -85,14 +84,10 @@ class PlaceDetailViewModel(
 
   /**
    * Writes the place, not the entry: dog policy is a fact about the restaurant (see
-   * [PlaceRepository.addPlace]), so every list that includes it sees the change. The place id is
-   * read from Room rather than the UI state so this doesn't depend on anyone collecting [uiState].
+   * [PlaceRepository.addPlace]), so every list that includes it sees the change.
    */
-  fun updateDogPolicy(dogPolicy: DogPolicy?) {
-    viewModelScope.launch {
-      val placeId = placeRepository.observeEntry(placeEntryId).first()?.place?.id ?: return@launch
-      placeRepository.setDogPolicy(placeId, dogPolicy)
-    }
+  fun updateDogPolicy(placeId: String, dogPolicy: DogPolicy?) {
+    viewModelScope.launch { placeRepository.setDogPolicy(placeId, dogPolicy) }
   }
 
   /**

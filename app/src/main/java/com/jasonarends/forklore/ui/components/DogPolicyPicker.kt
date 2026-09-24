@@ -19,10 +19,6 @@ val DogPolicy.label: String
 
 internal const val DOG_POLICY_NOT_RECORDED = "Not recorded"
 
-/** Whether the list row shows a paw: only where dogs are actually welcome. */
-internal val DogPolicy?.allowsDogs: Boolean
-  get() = this == DogPolicy.PATIO || this == DogPolicy.INSIDE
-
 /**
  * Three answers plus an explicit "Not recorded" chip: nobody having asked is different from the
  * restaurant saying no ([DogPolicy.NO]), so the absence of an answer has to stay a pickable state

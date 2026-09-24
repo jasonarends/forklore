@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.ui.components.EmptyState
 import com.jasonarends.forklore.ui.components.LedgerGlyph
@@ -38,7 +39,6 @@ import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.PlaceStatusChip
 import com.jasonarends.forklore.ui.components.RatingLabel
 import com.jasonarends.forklore.ui.components.UppercaseLabel
-import com.jasonarends.forklore.ui.components.allowsDogs
 import com.jasonarends.forklore.ui.components.label
 import com.jasonarends.forklore.ui.theme.Caveat
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
@@ -162,13 +162,18 @@ internal fun PlaceList(
                 color = colors.ink,
                 modifier = Modifier.weight(1f, fill = false),
               )
-              if (entry.place.dogPolicy.allowsDogs) {
-                LedgerIcon(
-                  LedgerGlyph.Paw,
-                  tint = colors.ink2,
-                  size = 18.dp,
-                  contentDescription = entry.place.dogPolicy?.label,
-                )
+              // Listed by name so a new DogPolicy value forces a decision about its paw.
+              when (val dogs = entry.place.dogPolicy) {
+                DogPolicy.PATIO,
+                DogPolicy.INSIDE ->
+                  LedgerIcon(
+                    LedgerGlyph.Paw,
+                    tint = colors.ink2,
+                    size = 18.dp,
+                    contentDescription = dogs.label,
+                  )
+                DogPolicy.NO,
+                null -> Unit
               }
             }
             // Food and service are rated apart; a bare rating word would read as an overall

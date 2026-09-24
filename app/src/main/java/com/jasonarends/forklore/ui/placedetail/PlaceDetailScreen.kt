@@ -102,7 +102,7 @@ fun PlaceDetailScreen(
         val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
-          onDogPolicyChange = viewModel::updateDogPolicy,
+          onDogPolicyChange = { viewModel.updateDogPolicy(current.entry.place.id, it) },
           onStatusChange = viewModel::updateStatus,
           onFoodRatingChange = viewModel::updateFoodRating,
           onServiceRatingChange = viewModel::updateServiceRating,
