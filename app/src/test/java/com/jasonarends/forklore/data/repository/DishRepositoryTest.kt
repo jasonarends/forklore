@@ -2,7 +2,9 @@ package com.jasonarends.forklore.data.repository
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.data.db.ForkloreDatabase
+import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceListEntity
@@ -15,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -171,5 +174,249 @@ class DishRepositoryTest {
     repository.addAlias(dishId, placeEntryId, "burnt ends")
 
     assertEquals(0, db.dishDao().observeForPlaceEntry(placeEntryId).first().single().aliases.size)
+  }
+
+  // ---- Dish interests (issue #7) -----------------------------------------------------
+
+  private suspend fun person(id: String, name: String, household: Boolean = true) = id.also {
+    db
+      .personDao()
+      .insert(
+        PersonEntity(
+          id = id,
+          name = name,
+          normalizedName = name.lowercase(),
+          isHouseholdMember = household,
+          createdAt = 0,
+          updatedAt = 0,
+        )
+      )
+  }
+
+  @Test
+  fun setInterest_storesAllFourOptionalDimensions_readBackFromTheDatabase() = runTest {
+    val robin = person("robin", "Robin")
+    val dale = person("dale", "Dale", household = false)
+    val dishId = repository.findOrCreateDish(placeEntryId, "Barrel Potatoes")
+
+    repository.setInterest(
+      dishId,
+      DishStatus.WANT,
+      forPersonId = robin,
+      recommendedById = dale,
+      modification = "add a Chilli bomb",
+      note = "  ask about the sauce  ",
+    )
+
+    val stored = db.dishInterestDao().observeForPlaceEntry(placeEntryId).first().single()
+    assertEquals(DishStatus.WANT, stored.status)
+    assertEquals(robin, stored.forPersonId)
+    assertEquals(dale, stored.recommendedById)
+    assertEquals("add a Chilli bomb", stored.modification)
+    // Free text is stored verbatim (CLAUDE.md rule 4).
+    assertEquals("  ask about the sauce  ", stored.note)
+  }
+
+  @Test
+  fun setInterest_storesABlankModificationAsNull_andTrimsARealOne() = runTest {
+    val dishId = repository.findOrCreateDish(placeEntryId, "Reuben")
+
+    repository.setInterest(dishId, DishStatus.WANT, modification = "   ")
+    now = 2_000L
+    repository.setInterest(dishId, DishStatus.TRIED, modification = " chopped ")
+
+    val stored = db.dishInterestDao().observeForPlaceEntry(placeEntryId).first()
+    assertEquals(listOf(null, "chopped"), stored.map { it.modification })
+  }
+
+  @Test
+  fun setInterest_allowsSeveralInterestsOnOneDish() = runTest {
+    val robin = person("robin", "Robin")
+    val dishId = repository.findOrCreateDish(placeEntryId, "Chicken")
+
+    repository.setInterest(dishId, DishStatus.WANT, forPersonId = robin)
+    repository.setInterest(dishId, DishStatus.NEVER_AGAIN)
+
+    val stored = db.dishInterestDao().observeForPlaceEntry(placeEntryId).first()
+    assertEquals(setOf(DishStatus.WANT, DishStatus.NEVER_AGAIN), stored.map { it.status }.toSet())
+  }
+
+  @Test
+  fun updateInterest_replacesEveryEditableField_andStampsUpdatedAt() = runTest {
+    val robin = person("robin", "Robin")
+    val dale = person("dale", "Dale", household = false)
+    val dishId = repository.findOrCreateDish(placeEntryId, "Arancini")
+    val id =
+      repository.setInterest(
+        dishId,
+        DishStatus.WANT,
+        forPersonId = robin,
+        recommendedById = dale,
+        modification = "extra sauce",
+        note = "old",
+      )
+
+    now = 5_000L
+    repository.updateInterest(
+      id,
+      status = DishStatus.NEVER_AGAIN,
+      forPersonId = null,
+      recommendedById = null,
+      modification = "",
+      note = "greasy",
+    )
+
+    val stored = db.dishInterestDao().byId(id)!!
+    assertEquals(DishStatus.NEVER_AGAIN, stored.status)
+    assertNull(stored.forPersonId)
+    assertNull(stored.recommendedById)
+    assertNull(stored.modification)
+    assertEquals("greasy", stored.note)
+    assertEquals(1_000L, stored.createdAt)
+    assertEquals(5_000L, stored.updatedAt)
+  }
+
+  @Test
+  fun removeInterest_softDeletes_soEveryReadDropsIt_butTheRowRemains() = runTest {
+    val dishId = repository.findOrCreateDish(placeEntryId, "Bread")
+    val id = repository.setInterest(dishId, DishStatus.NEVER_AGAIN)
+
+    now = 7_000L
+    repository.removeInterest(id)
+
+    assertEquals(emptyList<Any>(), db.dishInterestDao().observeForPlaceEntry(placeEntryId).first())
+    assertEquals(
+      emptyList<Any>(),
+      db.dishInterestDao().observeByStatus("list", DishStatus.NEVER_AGAIN).first(),
+    )
+    assertEquals(emptyList<Any>(), repository.observeListedInterests("list").first())
+    val tombstone = db.dishInterestDao().byId(id)!!
+    assertEquals(7_000L, tombstone.deletedAt)
+    assertEquals(7_000L, tombstone.updatedAt)
+  }
+
+  @Test
+  fun aRemovedInterest_isNotResurrectedByALaterUpdate_norRestamped() = runTest {
+    val dishId = repository.findOrCreateDish(placeEntryId, "Bread")
+    val id = repository.setInterest(dishId, DishStatus.NEVER_AGAIN)
+    now = 7_000L
+    repository.removeInterest(id)
+
+    now = 9_000L
+    repository.updateInterest(id, DishStatus.WANT, null, null, null, "stale editor")
+    repository.removeInterest(id)
+
+    val tombstone = db.dishInterestDao().byId(id)!!
+    assertEquals(DishStatus.NEVER_AGAIN, tombstone.status)
+    assertEquals(7_000L, tombstone.deletedAt)
+    assertEquals(7_000L, tombstone.updatedAt)
+  }
+
+  @Test
+  fun observeListedInterests_carriesTheNamesAListWideViewNeeds() = runTest {
+    val robin = person("robin", "Robin")
+    val dale = person("dale", "Dale", household = false)
+    db
+      .placeDao()
+      .insert(
+        PlaceEntity(
+          id = "branchy",
+          name = "Fifth Avenue Social",
+          branchLabel = "Plaza",
+          createdAt = 0,
+          updatedAt = 0,
+        )
+      )
+    db
+      .placeEntryDao()
+      .insert(
+        PlaceEntryEntity(
+          id = "entry-b",
+          placeListId = "list",
+          placeId = "branchy",
+          createdAt = 0,
+          updatedAt = 0,
+        )
+      )
+    repository.setInterest(
+      repository.findOrCreateDish(placeEntryId, "Barrel Potatoes"),
+      DishStatus.WANT,
+      forPersonId = robin,
+      recommendedById = dale,
+      modification = "add a Chilli bomb",
+    )
+    repository.setInterest(
+      repository.findOrCreateDish("entry-b", "Chicken Pot Pie"),
+      DishStatus.NEVER_AGAIN,
+    )
+
+    val listed = repository.observeListedInterests("list").first()
+
+    // Ordered by place name, so "Fifth Avenue Social" precedes "Halberd".
+    assertEquals(listOf("Chicken Pot Pie", "Barrel Potatoes"), listed.map { it.dishName })
+    val halberd = listed.single { it.dishName == "Barrel Potatoes" }
+    assertEquals(placeEntryId, halberd.placeEntryId)
+    assertEquals("Halberd", halberd.placeName)
+    assertNull(halberd.branchLabel)
+    assertEquals("Robin", halberd.forPersonName)
+    assertEquals("Dale", halberd.recommendedByName)
+    assertEquals("add a Chilli bomb", halberd.interest.modification)
+    val plaza = listed.single { it.dishName == "Chicken Pot Pie" }
+    assertEquals("Plaza", plaza.branchLabel)
+    assertNull(plaza.forPersonName)
+  }
+
+  /** Rule 6: the same restaurant on a private list must not leak its dishes into another. */
+  @Test
+  fun observeListedInterests_isScopedToOneList() = runTest {
+    db
+      .placeListDao()
+      .insert(PlaceListEntity(id = "private", name = "Mine", createdAt = 0, updatedAt = 0))
+    db
+      .placeEntryDao()
+      .insert(
+        PlaceEntryEntity(
+          id = "private-entry",
+          placeListId = "private",
+          placeId = "place",
+          createdAt = 0,
+          updatedAt = 0,
+        )
+      )
+    repository.setInterest(
+      repository.findOrCreateDish(placeEntryId, "Shared Dish"),
+      DishStatus.WANT,
+    )
+    repository.setInterest(
+      repository.findOrCreateDish("private-entry", "Private Dish"),
+      DishStatus.NEVER_AGAIN,
+      note = "private note",
+    )
+
+    assertEquals(
+      listOf("Shared Dish"),
+      repository.observeListedInterests("list").first().map { it.dishName },
+    )
+    assertEquals(
+      listOf("Private Dish"),
+      repository.observeListedInterests("private").first().map { it.dishName },
+    )
+  }
+
+  @Test
+  fun observeListedInterests_keepsAnInterest_whoseCitedPersonWasRemoved() = runTest {
+    val dale = person("dale", "Dale", household = false)
+    repository.setInterest(
+      repository.findOrCreateDish(placeEntryId, "Pot Pie"),
+      DishStatus.WANT,
+      recommendedById = dale,
+    )
+    val stored = db.personDao().byId(dale)!!
+    db.personDao().update(stored.copy(deletedAt = 3_000L))
+
+    val listed = repository.observeListedInterests("list").first().single()
+
+    assertNull(listed.recommendedByName)
+    assertEquals(dale, listed.interest.recommendedById)
   }
 }
