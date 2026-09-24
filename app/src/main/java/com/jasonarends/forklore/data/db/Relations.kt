@@ -41,3 +41,18 @@ data class DishWithOpinions(
   @Embedded val dish: DishEntity,
   @Relation(parentColumn = "id", entityColumn = "dishId") val opinions: List<DishOpinionEntity>,
 )
+
+/**
+ * One interest with the names needed to show it outside its own dish screen: the dish, the place
+ * entry to open when it's tapped, the place, and the people it cites. Names are read at query time
+ * rather than copied, so a renamed person or dish shows up here with no extra write.
+ */
+data class ListedDishInterest(
+  @Embedded val interest: DishInterestEntity,
+  val dishName: String,
+  val placeEntryId: String,
+  val placeName: String,
+  val branchLabel: String?,
+  val forPersonName: String?,
+  val recommendedByName: String?,
+)

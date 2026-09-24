@@ -38,6 +38,7 @@ class PlaceListTest {
             ),
           onAddPlace = {},
           onPlaceClick = {},
+          onDishInterestsClick = {},
         )
       }
     }
@@ -54,7 +55,12 @@ class PlaceListTest {
   fun tellsTheUserWhenTheListIsEmpty() {
     composeTestRule.setContent {
       ForkloreTheme {
-        PlaceList(entries = emptyList(), onAddPlace = {}, onPlaceClick = {})
+        PlaceList(
+          entries = emptyList(),
+          onAddPlace = {},
+          onPlaceClick = {},
+          onDishInterestsClick = {},
+        )
       }
     }
 
@@ -68,11 +74,35 @@ class PlaceListTest {
     var clicked = false
     composeTestRule.setContent {
       ForkloreTheme {
-        PlaceList(entries = emptyList(), onAddPlace = { clicked = true }, onPlaceClick = {})
+        PlaceList(
+          entries = emptyList(),
+          onAddPlace = { clicked = true },
+          onPlaceClick = {},
+          onDishInterestsClick = {},
+        )
       }
     }
 
     composeTestRule.onNodeWithText("Add a place").performClick()
+
+    assertEquals(true, clicked)
+  }
+
+  @Test
+  fun tappingTheDishesLink_invokesTheCallback() {
+    var clicked = false
+    composeTestRule.setContent {
+      ForkloreTheme {
+        PlaceList(
+          entries = emptyList(),
+          onAddPlace = {},
+          onPlaceClick = {},
+          onDishInterestsClick = { clicked = true },
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("Dishes: want & never again").performClick()
 
     assertEquals(true, clicked)
   }
@@ -83,7 +113,12 @@ class PlaceListTest {
     val place = entry("Halberd")
     composeTestRule.setContent {
       ForkloreTheme {
-        PlaceList(entries = listOf(place), onAddPlace = {}, onPlaceClick = { clickedId = it })
+        PlaceList(
+          entries = listOf(place),
+          onAddPlace = {},
+          onPlaceClick = { clickedId = it },
+          onDishInterestsClick = {},
+        )
       }
     }
 

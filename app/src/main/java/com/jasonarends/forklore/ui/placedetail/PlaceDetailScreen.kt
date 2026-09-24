@@ -64,6 +64,8 @@ fun PlaceDetailScreen(
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
   dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
   visitsViewModel: VisitsViewModel = viewModel(factory = VisitsViewModel.factory(placeEntryId)),
+  interestsViewModel: DishInterestsViewModel =
+    viewModel(factory = DishInterestsViewModel.factory(placeEntryId)),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   // One local snapshot, read once: `state` is a delegated property backed by `State<T>.value`,
@@ -98,6 +100,8 @@ fun PlaceDetailScreen(
         val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
         val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
         val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
+        val interestsState by interestsViewModel.uiState.collectAsStateWithLifecycle()
+        val interestDraft by interestsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
           entry = current.entry,
           onStatusChange = viewModel::updateStatus,
@@ -141,6 +145,35 @@ fun PlaceDetailScreen(
               onQueryChange = dishesViewModel::onQueryChange,
               onAddDish = dishesViewModel::addDish,
               onAddAlias = dishesViewModel::addAlias,
+              dishInterests = { dishId ->
+                when (val interests = interestsState) {
+                  DishInterestsUiState.Loading -> Unit
+                  is DishInterestsUiState.Error ->
+                    Text(
+                      "Couldn't load interests: ${interests.throwable.message}",
+                      style = ForkloreType.fieldInput,
+                      color = ForkloreTheme.colors.stamp,
+                    )
+                  is DishInterestsUiState.Success ->
+                    DishInterests(
+                      interests = interests.forDish(dishId),
+                      people = interests.people,
+                      draft = interestDraft?.takeIf { it.dishId == dishId },
+                      onStartAdd = { interestsViewModel.startAdd(dishId) },
+                      onStartEdit = interestsViewModel::startEdit,
+                      onCancelDraft = interestsViewModel::cancelDraft,
+                      onStatusChange = interestsViewModel::onStatusChange,
+                      onForPersonChange = interestsViewModel::onForPersonChange,
+                      onRecommendedByChange = interestsViewModel::onRecommendedByChange,
+                      onModificationChange = interestsViewModel::onModificationChange,
+                      onNoteChange = interestsViewModel::onNoteChange,
+                      onCreateForPerson = interestsViewModel::onCreateForPerson,
+                      onCreateRecommender = interestsViewModel::onCreateRecommender,
+                      onSave = interestsViewModel::save,
+                      onRemove = interestsViewModel::remove,
+                    )
+                }
+              },
             )
           },
           modifier = Modifier.padding(innerPadding),
@@ -242,9 +275,10 @@ internal fun PlaceDetail(
 
 /**
  * Every dish recorded at this place entry, plus the field that adds one. `internal` (not `private`)
- * so tests can exercise it directly rather than through the whole [PlaceDetail] column. [DishRow]'s
- * name row leaves a trailing slot for issue #7's per-dish status chip, and space below it for
- * issue #8's opinion cards — neither is wired in yet.
+ * so tests can exercise it directly rather than through the whole [PlaceDetail] column.
+ * [dishInterests] renders each dish's want / tried / never-again rows and editor (issue #7) under
+ * its aliases; it takes the dish id so this composable stays ignorant of what an interest is. Space
+ * below the row remains for issue #8's opinion cards.
  */
 @Composable
 internal fun DishesSection(
@@ -254,6 +288,7 @@ internal fun DishesSection(
   onQueryChange: (String) -> Unit,
   onAddDish: (String) -> Unit,
   onAddAlias: (dishId: String, alias: String) -> Unit,
+  dishInterests: @Composable (dishId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -275,6 +310,7 @@ internal fun DishesSection(
               DishRow(
                 dish = dish,
                 onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
+                interests = { dishInterests(dish.dish.id) },
                 modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
               )
             }
@@ -301,6 +337,7 @@ internal fun DishesSection(
 private fun DishRow(
   dish: DishWithAliases,
   onAddAlias: (String) -> Unit,
+  interests: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -316,7 +353,8 @@ private fun DishRow(
         modifier = Modifier.padding(top = 2.dp),
       )
     }
-    AliasEntry(onAdd = onAddAlias, modifier = Modifier.padding(top = 6.dp))
+    Column(modifier = Modifier.padding(top = 6.dp)) { interests() }
+    AliasEntry(onAdd = onAddAlias)
   }
 }
 
@@ -499,6 +537,7 @@ private fun PlaceDetailPopulatedPreview() {
             onQueryChange = {},
             onAddDish = {},
             onAddAlias = { _, _ -> },
+            dishInterests = {},
           )
         },
       )
@@ -538,6 +577,7 @@ private fun PlaceDetailEmptyPreview() {
             onQueryChange = {},
             onAddDish = {},
             onAddAlias = { _, _ -> },
+            dishInterests = {},
           )
         },
       )

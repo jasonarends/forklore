@@ -199,11 +199,36 @@ interface DishInterestDao {
 
   @Update suspend fun update(interest: DishInterestEntity)
 
+  @Query("SELECT * FROM dish_interests WHERE id = :id")
+  suspend fun byId(id: String): DishInterestEntity?
+
   @Query(
     "SELECT i.* FROM dish_interests i JOIN dishes d ON d.id = i.dishId " +
-      "WHERE d.placeEntryId = :placeEntryId AND i.deletedAt IS NULL AND d.deletedAt IS NULL"
+      "WHERE d.placeEntryId = :placeEntryId AND i.deletedAt IS NULL AND d.deletedAt IS NULL " +
+      "ORDER BY i.createdAt, i.id"
   )
   fun observeForPlaceEntry(placeEntryId: String): Flow<List<DishInterestEntity>>
+
+  /**
+   * Every live interest across one list with the names a list-wide view needs, in one query. Scoped
+   * through the place entry's `placeListId` (CLAUDE.md rule 6): the same restaurant on another list
+   * contributes nothing here. People are LEFT JOINed and filtered on `deletedAt` in the join, so a
+   * removed person leaves the interest intact with no name rather than dropping the row.
+   */
+  @Query(
+    "SELECT i.*, d.canonicalName AS dishName, pe.id AS placeEntryId, p.name AS placeName, " +
+      "p.branchLabel AS branchLabel, fp.name AS forPersonName, rp.name AS recommendedByName " +
+      "FROM dish_interests i " +
+      "JOIN dishes d ON d.id = i.dishId " +
+      "JOIN place_entries pe ON pe.id = d.placeEntryId " +
+      "JOIN places p ON p.id = pe.placeId " +
+      "LEFT JOIN people fp ON fp.id = i.forPersonId AND fp.deletedAt IS NULL " +
+      "LEFT JOIN people rp ON rp.id = i.recommendedById AND rp.deletedAt IS NULL " +
+      "WHERE pe.placeListId = :placeListId " +
+      "AND i.deletedAt IS NULL AND d.deletedAt IS NULL AND pe.deletedAt IS NULL " +
+      "ORDER BY p.name COLLATE NOCASE, d.canonicalName COLLATE NOCASE, i.createdAt, i.id"
+  )
+  fun observeListedForList(placeListId: String): Flow<List<ListedDishInterest>>
 
   /** Every want (or never-again) across a whole list, for the "what should we order" view. */
   @Query(

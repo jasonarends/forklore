@@ -14,3 +14,6 @@ import kotlinx.serialization.Serializable
 @Serializable data class PlaceDetail(val placeEntryId: String) : NavKey
 
 @Serializable data object People : NavKey
+
+/** What the current list wants to try and must never reorder, across all its places. */
+@Serializable data object DishInterestList : NavKey
