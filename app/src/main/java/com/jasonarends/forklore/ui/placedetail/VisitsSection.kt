@@ -105,7 +105,7 @@ internal fun VisitsSection(
 private val dayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M/d/yy")
 private val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
 
-internal fun VisitEntity.dateLabel(): String {
+private fun VisitEntity.dateLabel(): String {
   val epochDay = dateEpochDay ?: return "No date"
   val date = LocalDate.ofEpochDay(epochDay)
   return when (datePrecision) {

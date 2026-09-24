@@ -158,9 +158,9 @@ internal fun RampLabel(
   text: String,
   emphasis: RatingEmphasis,
   modifier: Modifier = Modifier,
-  style: TextStyle = ForkloreType.inlineRating,
 ) {
   val colors = ForkloreTheme.colors
+  val style = ForkloreType.inlineRating
   Text(
     text = text,
     modifier = modifier,

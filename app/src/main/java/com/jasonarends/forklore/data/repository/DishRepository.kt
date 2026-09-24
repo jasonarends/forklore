@@ -180,8 +180,16 @@ class DishRepository(
 
   private suspend fun requireVisitAtDishsEntry(dishId: String, visitId: String?) {
     if (visitId == null) return
-    require(opinionDao.countVisitAtDishsEntry(dishId, visitId) > 0) {
-      "Visit $visitId is not a live visit at the same place entry as dish $dishId"
+    if (opinionDao.countVisitAtDishsEntry(dishId, visitId) == 0) {
+      throw VisitOutsidePlaceEntryException(
+        "Visit $visitId is not a live visit at the same place entry as dish $dishId"
+      )
     }
   }
 }
+
+/**
+ * An opinion tried to cite a visit that isn't one of its own place entry's. Its own type so a
+ * caller can tell this apart from any other [IllegalArgumentException] a write might raise.
+ */
+class VisitOutsidePlaceEntryException(message: String) : IllegalArgumentException(message)

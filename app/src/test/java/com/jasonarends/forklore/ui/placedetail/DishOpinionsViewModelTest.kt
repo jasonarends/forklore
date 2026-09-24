@@ -16,11 +16,15 @@ import com.jasonarends.forklore.data.repository.DishRepository
 import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.data.repository.VisitRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -392,7 +396,7 @@ class DishOpinionsViewModelTest {
     }
 
   @Test
-  fun editingAnOpinionWhoseVisitWasDeleted_dropsTheStaleLink() =
+  fun editingAnOpinionWhoseVisitWasDeleted_keepsTheLink_andStillSaves() =
     runTest(testDispatcher) {
       db
         .visitDao()
@@ -402,8 +406,42 @@ class DishOpinionsViewModelTest {
       val vm = observing()
 
       vm.startEdit(vm.success().byDish.getValue(dishId).cards.single().opinion)
+      vm.onNoteChange("Edited after the visit went.")
+      vm.save()
 
-      assertNull(vm.draft.value!!.visitId)
+      assertNull(vm.draft.value)
+      val stored = db.dishOpinionDao().observeForDish(dishId).first().single()
+      assertEquals("Edited after the visit went.", stored.note)
+      assertEquals("v1", stored.visitId)
+    }
+
+  @Test
+  fun cancelAndEdits_areIgnoredWhileASaveIsInFlight() =
+    runTest(testDispatcher) {
+      // A Main that queues launches instead of running them inline, so save() is observably
+      // in flight until advanceUntilIdle().
+      Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+      val clock = Clock { 0L }
+      val vm =
+        DishOpinionsViewModel(
+          dishRepository,
+          PersonRepository(db.personDao(), clock),
+          VisitRepository(db, db.visitDao(), clock),
+          entryId,
+        )
+      vm.startAdd(dishId)
+      vm.onAuthorChange(setOf("ana"))
+      vm.onNoteChange("first")
+
+      vm.save()
+      vm.cancelDraft()
+      vm.onNoteChange("typed after save")
+
+      assertEquals(true, vm.draft.value?.saving)
+      assertEquals("first", vm.draft.value?.note)
+      advanceUntilIdle()
+      assertNull(vm.draft.value)
+      assertEquals("first", db.dishOpinionDao().observeForDish(dishId).first().single().note)
     }
 
   @Test

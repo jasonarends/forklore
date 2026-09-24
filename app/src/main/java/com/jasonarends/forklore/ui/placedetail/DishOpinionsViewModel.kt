@@ -15,6 +15,7 @@ import com.jasonarends.forklore.data.db.TemperatureRating
 import com.jasonarends.forklore.data.db.VisitWithAttendees
 import com.jasonarends.forklore.data.repository.DishRepository
 import com.jasonarends.forklore.data.repository.PersonRepository
+import com.jasonarends.forklore.data.repository.VisitOutsidePlaceEntryException
 import com.jasonarends.forklore.data.repository.VisitRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,7 +44,12 @@ class DishOpinionsViewModel(
 ) : ViewModel() {
 
   val uiState: StateFlow<DishOpinionsUiState> =
-    combine(
+    combine<
+        List<DishOpinionEntity>,
+        List<PersonEntity>,
+        List<VisitWithAttendees>,
+        DishOpinionsUiState,
+      >(
         dishRepository.observeOpinionsForPlaceEntry(placeEntryId),
         personRepository.observeAll(),
         visitRepository.observeForPlaceEntry(placeEntryId),
@@ -52,7 +58,7 @@ class DishOpinionsViewModel(
           byDish = buildDishOpinions(opinions, people),
           people = people,
           visits = visits,
-        ) as DishOpinionsUiState
+        )
       }
       .catch { emit(DishOpinionsUiState.Error(it)) }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DishOpinionsUiState.Loading)
@@ -65,12 +71,11 @@ class DishOpinionsViewModel(
   }
 
   /**
-   * The draft's visit link is dropped if that visit no longer exists: the picker only offers live
-   * visits, so keeping the id would hold a selection nobody can see or clear.
+   * A link to a visit that has since been deleted is kept as-is, not dropped: the picker simply
+   * shows nothing selected, saving leaves the link alone ([DishRepository.updateOpinion] doesn't
+   * re-validate an unchanged one), and choosing a live visit replaces it.
    */
   fun startEdit(opinion: DishOpinionEntity) {
-    val liveVisitIds =
-      (uiState.value as? DishOpinionsUiState.Success)?.visits?.map { it.visit.id }.orEmpty()
     _draft.value =
       OpinionDraft(
         dishId = opinion.dishId,
@@ -79,12 +84,13 @@ class DishOpinionsViewModel(
         rating = opinion.rating,
         temperature = opinion.temperature,
         note = opinion.note,
-        visitId = opinion.visitId?.takeIf { it in liveVisitIds },
+        visitId = opinion.visitId,
       )
   }
 
+  /** Ignored while a save or delete is in flight, so its result can't land on a different draft. */
   fun cancelDraft() {
-    _draft.value = null
+    _draft.update { if (it?.saving == true) it else null }
   }
 
   fun onAuthorChange(selection: Set<String>) = updateDraft {
@@ -113,8 +119,16 @@ class DishOpinionsViewModel(
     }
   }
 
+  /** Edits are ignored while saving: what was typed after Save was tapped would be lost anyway. */
   private fun updateDraft(change: (OpinionDraft) -> OpinionDraft) {
-    _draft.update { it?.let(change) }
+    _draft.update { if (it == null || it.saving) it else change(it) }
+  }
+
+  /** Clears the draft only if it is still the one being saved; see [cancelDraft]. */
+  private fun finishDraft(saved: OpinionDraft) {
+    _draft.update {
+      if (it?.dishId == saved.dishId && it.opinionId == saved.opinionId) null else it
+    }
   }
 
   /** No-op on a draft that can't be saved yet or is already saving; see [OpinionDraft.canSave]. */
@@ -144,10 +158,10 @@ class DishOpinionsViewModel(
             visitId = current.visitId,
           )
         }
-        _draft.value = null
+        finishDraft(current)
       } catch (_: SQLiteException) {
         _draft.update { it?.copy(saving = false, error = "Couldn't save this opinion. Try again.") }
-      } catch (_: IllegalArgumentException) {
+      } catch (_: VisitOutsidePlaceEntryException) {
         _draft.update {
           it?.copy(saving = false, error = "That visit isn't part of this place. Pick another.")
         }
@@ -164,7 +178,7 @@ class DishOpinionsViewModel(
     viewModelScope.launch {
       try {
         dishRepository.deleteOpinion(opinionId)
-        _draft.value = null
+        finishDraft(current)
       } catch (_: SQLiteException) {
         _draft.update {
           it?.copy(saving = false, error = "Couldn't delete this opinion. Try again.")
@@ -226,8 +240,10 @@ data class OpinionCard(
  * One dish's opinions, ready to draw. "Disagree" is deliberately blunt: two *different authors*
  * gave *different* values. There is no threshold — the source note's own example is Bad against
  * "fine", one step apart, and that is exactly the case worth surfacing. Ratings and temperatures
- * are judged separately, and an opinion that left a field blank takes no side on it. One author
- * disagreeing with themselves across visits is not a disagreement.
+ * are judged separately, and an opinion that left a field blank takes no side on it. It compares
+ * every opinion, not each author's latest, so an author with an old "Bad" and a newer "Good" still
+ * disagrees with someone who says "Good"; one author contradicting only themselves, with nobody
+ * else weighing in, is not a disagreement.
  */
 data class DishOpinions(
   val cards: List<OpinionCard>,

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -133,11 +135,10 @@ internal fun DishOpinionsBlock(
  * The disagreement, made visible without hiding anyone: every card is always drawn, each author's
  * verdict in their own colour, and when two authors' ratings (or temperatures) differ a handwritten
  * line in `stamp` says so above the cards. Two cards per row, tilted opposite ways per issue #15 —
- * two columns rather than a stack because the point is comparing them, and a card's header wraps
- * (name above rating) so both verdicts still fit at half width and line up across the row. A third
- * or later card wraps onto the next row.
+ * two columns rather than a stack because the point is comparing them, and a card puts its rating
+ * and temperature on their own lines beneath the name so the words fit at half width. A third or
+ * later card starts the next row.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OpinionCards(
   dishId: String,
@@ -154,21 +155,26 @@ private fun OpinionCards(
       modifier = Modifier.padding(top = 4.dp).testTag("opinions-disagree-$dishId"),
     )
   }
-  FlowRow(
+  Column(
     modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 4.dp, end = 4.dp),
-    horizontalArrangement = Arrangement.spacedBy(14.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp),
-    maxItemsInEachRow = 2,
   ) {
-    opinions.cards.forEachIndexed { index, card ->
-      OpinionCardView(
-        card = card,
-        showTemperature = opinions.anyTemperature,
-        visit = visits.firstOrNull { it.visit.id == card.opinion.visitId }?.visit,
-        tiltDegrees = if (index % 2 == 0) -1.5f else 1.3f,
-        onEdit = onEdit?.let { edit -> { edit(card.opinion) } },
-        modifier = Modifier.weight(1f),
-      )
+    opinions.cards.chunked(2).forEach { row ->
+      Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        row.forEachIndexed { columnIndex, card ->
+          OpinionCardView(
+            card = card,
+            showTemperature = opinions.anyTemperature,
+            visit = visits.firstOrNull { it.visit.id == card.opinion.visitId }?.visit,
+            tiltDegrees = if (columnIndex == 0) -1.5f else 1.3f,
+            onEdit = onEdit?.let { edit -> { edit(card.opinion) } },
+            modifier = Modifier.weight(1f),
+          )
+        }
+        // A lone trailing card keeps a column's width, so a third opinion doesn't stretch across
+        // the row and stop reading as one of a pair.
+        if (row.size == 1 && opinions.cards.size > 1) Spacer(Modifier.weight(1f))
+      }
     }
   }
 }
@@ -240,31 +246,36 @@ private fun OpinionCardView(
           .padding(13.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+      // Avatar and name share a row; the rating and temperature words each get the card's full
+      // content width beneath it. At a half-width card and a large font scale, a long word like
+      // "Phenomenal" beside the avatar would have too little room and break mid-word.
       Row(verticalAlignment = Alignment.CenterVertically) {
         Avatar(initial = card.authorName.firstOrNull()?.uppercase() ?: "?", color = tone)
-        Column(modifier = Modifier.padding(start = 8.dp)) {
-          Text(text = card.authorName, style = ForkloreType.opinionAuthor, color = tone)
-          if (opinion.rating != null) {
-            Text(
-              text = opinion.rating.label,
-              style = ForkloreType.opinionRating,
-              color = tone,
-              modifier = Modifier.testTag("opinion-rating-${opinion.id}"),
-            )
-          } else {
-            Text(
-              text = "Not rated",
-              style = ForkloreType.opinionRating.copy(fontStyle = null),
-              color = colors.ink2,
-            )
-          }
-        }
+        Text(
+          text = card.authorName,
+          style = ForkloreType.opinionAuthor,
+          color = tone,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f).padding(start = 8.dp),
+        )
+      }
+      if (opinion.rating != null) {
+        Text(
+          text = opinion.rating.label,
+          style = ForkloreType.opinionRating,
+          color = tone,
+          modifier = Modifier.testTag("opinion-rating-${opinion.id}"),
+        )
+      } else {
+        Text(
+          text = "Not rated",
+          style = ForkloreType.opinionRating.copy(fontStyle = null),
+          color = colors.ink2,
+        )
       }
       if (showTemperature) {
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column {
           UppercaseLabel(text = "Temp", style = ForkloreType.fieldLabel, color = colors.ink2)
           if (opinion.temperature != null) {
             TemperatureLabel(
