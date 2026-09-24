@@ -29,13 +29,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.LedgerGlyph
+import com.jasonarends.forklore.ui.components.LedgerIcon
 import com.jasonarends.forklore.ui.components.LedgerOutlinedFullWidthButton
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.PlaceStatusChip
 import com.jasonarends.forklore.ui.components.RatingLabel
 import com.jasonarends.forklore.ui.components.UppercaseLabel
+import com.jasonarends.forklore.ui.components.label
 import com.jasonarends.forklore.ui.theme.Caveat
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import com.jasonarends.forklore.ui.theme.ForkloreType
@@ -136,20 +140,42 @@ internal fun PlaceList(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
           ) {
-            Text(
-              text =
-                buildAnnotatedString {
-                  append(entry.place.name)
-                  entry.place.branchLabel?.let { branch ->
-                    withStyle(SpanStyle(fontFamily = Caveat, color = colors.ink2)) {
-                      append(" · $branch")
-                    }
-                  }
-                },
-              style = ForkloreType.placeNameList,
-              color = colors.ink,
+            // The paw sits with the name, not among the verdicts on the right: dog policy is a
+            // fact about the restaurant. fill = false lets a long name wrap without pushing the
+            // paw off the row.
+            Row(
               modifier = Modifier.weight(1f),
-            )
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text =
+                  buildAnnotatedString {
+                    append(entry.place.name)
+                    entry.place.branchLabel?.let { branch ->
+                      withStyle(SpanStyle(fontFamily = Caveat, color = colors.ink2)) {
+                        append(" · $branch")
+                      }
+                    }
+                  },
+                style = ForkloreType.placeNameList,
+                color = colors.ink,
+                modifier = Modifier.weight(1f, fill = false),
+              )
+              // Listed by name so a new DogPolicy value forces a decision about its paw.
+              when (val dogs = entry.place.dogPolicy) {
+                DogPolicy.PATIO,
+                DogPolicy.INSIDE ->
+                  LedgerIcon(
+                    LedgerGlyph.Paw,
+                    tint = colors.ink2,
+                    size = 18.dp,
+                    contentDescription = dogs.label,
+                  )
+                DogPolicy.NO,
+                null -> Unit
+              }
+            }
             // Food and service are rated apart; a bare rating word would read as an overall
             // verdict, so the list row keeps the "Food:" label even though the mockup's inline
             // rating doesn't show one.

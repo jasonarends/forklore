@@ -6,6 +6,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
@@ -111,6 +112,38 @@ class PlaceDetailViewModelTest {
       backgroundScope.launch { viewModel.uiState.collect {} }
 
       viewModel.updateStatus(PlaceStatus.VISITED)
+      advanceUntilIdle()
+
+      assertEquals(PlaceStatus.VISITED, db.placeEntryDao().byId(entryId)!!.status)
+    }
+
+  @Test
+  fun dogPolicy_canBeSet_changed_andClearedBackToNotRecorded() =
+    runTest(testDispatcher) {
+      val viewModel = viewModel()
+      backgroundScope.launch { viewModel.uiState.collect {} }
+
+      for (policy in listOf(DogPolicy.PATIO, DogPolicy.NO, null)) {
+        viewModel.updateDogPolicy("place", policy)
+        advanceUntilIdle()
+
+        // Read back from Room, and off the Place row: dog policy is the restaurant's, not the
+        // entry's.
+        assertEquals(policy, db.placeDao().byId("place")!!.dogPolicy)
+        val state = viewModel.uiState.value as PlaceDetailUiState.Success
+        assertEquals(policy, state.entry.place.dogPolicy)
+      }
+    }
+
+  @Test
+  fun changingDogPolicy_doesNotTouchTheEntry() =
+    runTest(testDispatcher) {
+      val viewModel = viewModel()
+      backgroundScope.launch { viewModel.uiState.collect {} }
+      viewModel.updateStatus(PlaceStatus.VISITED)
+      advanceUntilIdle()
+
+      viewModel.updateDogPolicy("place", DogPolicy.INSIDE)
       advanceUntilIdle()
 
       assertEquals(PlaceStatus.VISITED, db.placeEntryDao().byId(entryId)!!.status)
