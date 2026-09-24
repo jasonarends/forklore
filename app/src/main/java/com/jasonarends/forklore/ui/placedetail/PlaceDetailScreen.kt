@@ -147,13 +147,9 @@ fun PlaceDetailScreen(
               onAddAlias = dishesViewModel::addAlias,
               dishInterests = { dishId ->
                 when (val interests = interestsState) {
-                  DishInterestsUiState.Loading -> Unit
-                  is DishInterestsUiState.Error ->
-                    Text(
-                      "Couldn't load interests: ${interests.throwable.message}",
-                      style = ForkloreType.fieldInput,
-                      color = ForkloreTheme.colors.stamp,
-                    )
+                  // The failure is reported once below the section, not repeated under every dish.
+                  DishInterestsUiState.Loading,
+                  is DishInterestsUiState.Error -> Unit
                   is DishInterestsUiState.Success ->
                     DishInterests(
                       interests = interests.forDish(dishId),
@@ -175,6 +171,13 @@ fun PlaceDetailScreen(
                 }
               },
             )
+            (interestsState as? DishInterestsUiState.Error)?.let {
+              Text(
+                "Couldn't load dish interests: ${it.throwable.message}",
+                style = ForkloreType.fieldInput,
+                color = ForkloreTheme.colors.stamp,
+              )
+            }
           },
           modifier = Modifier.padding(innerPadding),
         )
