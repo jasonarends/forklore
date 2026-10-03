@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.data.db.PlaceStatus
 import com.jasonarends.forklore.data.db.Rating
+import com.jasonarends.forklore.data.db.TemperatureRating
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -59,6 +60,41 @@ class ComponentsTest {
     assertEquals(RatingEmphasis.Strong, Rating.PHENOMENAL.emphasis)
     assertEquals(RatingEmphasis.Strong, Rating.LIFE_CHANGING.emphasis)
     assertNotEquals(Rating.EXCELLENT.emphasis, Rating.LIFE_CHANGING.emphasis)
+  }
+
+  @Test
+  fun tappingATemperatureSelectsIt_andTappingItAgainClearsIt() {
+    var temperature: TemperatureRating? by mutableStateOf(null)
+    compose.setContent {
+      ForkloreTheme {
+        TemperaturePicker(temperature = temperature, onTemperatureChange = { temperature = it })
+      }
+    }
+
+    compose.onNodeWithText("Lacking").performClick()
+    assertEquals(TemperatureRating.LACKING, temperature)
+    compose.onNodeWithText("Lacking").assertIsSelected()
+    compose.onNodeWithText("Phenomenal").assertIsNotSelected()
+
+    compose.onNodeWithText("Lacking").performClick()
+    assertNull(temperature)
+    compose.onNodeWithText("Lacking").assertIsNotSelected()
+  }
+
+  @Test
+  fun everyTemperatureIsOnScreenAtOnce_soTheTopOfTheRampIsNeverHidden() {
+    compose.setContent {
+      ForkloreTheme { TemperaturePicker(temperature = null, onTemperatureChange = {}) }
+    }
+
+    TemperatureRating.entries.forEach { compose.onNodeWithText(it.label).assertExists() }
+  }
+
+  @Test
+  fun theTopOfTheTemperatureRampIsNotFlattened() {
+    assertEquals(RatingEmphasis.Strong, TemperatureRating.PHENOMENAL.emphasis)
+    assertNotEquals(TemperatureRating.ADEQUATE.emphasis, TemperatureRating.PHENOMENAL.emphasis)
+    assertNotEquals(TemperatureRating.INEDIBLE.emphasis, TemperatureRating.ADEQUATE.emphasis)
   }
 
   @Test

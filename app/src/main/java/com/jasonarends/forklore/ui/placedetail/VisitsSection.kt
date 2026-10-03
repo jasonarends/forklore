@@ -116,6 +116,10 @@ private fun VisitEntity.dateLabel(): String {
   }
 }
 
+/** "7/21/26 · Dinner": how a visit is named wherever something needs to point at it. */
+internal fun VisitEntity.summaryLabel(): String =
+  listOfNotNull(dateLabel(), meal?.label).joinToString(" · ")
+
 @Composable
 private fun VisitRow(visit: VisitWithAttendees, onEdit: () -> Unit, modifier: Modifier = Modifier) {
   val colors = ForkloreTheme.colors
@@ -125,7 +129,7 @@ private fun VisitRow(visit: VisitWithAttendees, onEdit: () -> Unit, modifier: Mo
       horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       Text(
-        text = listOfNotNull(visit.visit.dateLabel(), visit.visit.meal?.label).joinToString(" · "),
+        text = visit.visit.summaryLabel(),
         style = ForkloreType.opinionAuthor,
         color = colors.ink,
         modifier = Modifier.weight(1f),

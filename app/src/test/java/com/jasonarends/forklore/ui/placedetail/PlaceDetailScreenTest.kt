@@ -164,6 +164,7 @@ class PlaceDetailScreenTest {
               onAddDish = {},
               onAddAlias = { _, _ -> },
               dishInterests = {},
+              opinionsContent = {},
             )
           },
         )
@@ -217,6 +218,7 @@ class PlaceDetailScreenTest {
           onAddDish = {},
           onAddAlias = { _, _ -> },
           dishInterests = {},
+          opinionsContent = {},
         )
       }
     }
@@ -238,6 +240,7 @@ class PlaceDetailScreenTest {
           onAddDish = { added = it },
           onAddAlias = { _, _ -> },
           dishInterests = {},
+          opinionsContent = {},
         )
       }
     }
@@ -266,6 +269,7 @@ class PlaceDetailScreenTest {
           onAddDish = { added = it },
           onAddAlias = { _, _ -> },
           dishInterests = {},
+          opinionsContent = {},
         )
       }
     }
@@ -287,6 +291,7 @@ class PlaceDetailScreenTest {
           onAddDish = {},
           onAddAlias = { _, _ -> },
           dishInterests = {},
+          opinionsContent = {},
         )
       }
     }
