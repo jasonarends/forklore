@@ -186,10 +186,15 @@ class PersonRepositoryTest {
   @Test
   fun findOrCreate_neverDemotesAHouseholdMember_whenTheBoxIsUnticked() = runTest {
     val id = repository.findOrCreate("Robin", isHouseholdMember = true)
+    val createdAt = db.personDao().byId(id)!!.updatedAt
+    now = 4_000L
 
     repository.findOrCreate("robin", isHouseholdMember = false)
 
-    assertTrue(db.personDao().byId(id)!!.isHouseholdMember)
+    val stored = db.personDao().byId(id)!!
+    assertTrue(stored.isHouseholdMember)
+    // Nothing to change means nothing written: a needless updatedAt stamp would re-sync the row.
+    assertEquals(createdAt, stored.updatedAt)
   }
 
   @Test

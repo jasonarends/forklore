@@ -212,7 +212,6 @@ private fun AddPersonRow(onAddPerson: (String, Boolean) -> Unit, modifier: Modif
   // way.
   var name by rememberSaveable { mutableStateOf("") }
   var isHouseholdMember by rememberSaveable { mutableStateOf(true) }
-  val colors = ForkloreTheme.colors
 
   Column(modifier = modifier.fillMaxWidth()) {
     Row(
