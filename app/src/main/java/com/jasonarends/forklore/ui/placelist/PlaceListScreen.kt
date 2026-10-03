@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -31,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jasonarends.forklore.data.db.PlaceEntryWithPlace
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.LedgerGhostButton
 import com.jasonarends.forklore.ui.components.LedgerOutlinedFullWidthButton
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.PlaceStatusChip
@@ -46,6 +48,7 @@ fun PlaceListScreen(
   onAddPlace: () -> Unit,
   onPlaceClick: (String) -> Unit,
   onPeopleClick: () -> Unit,
+  onDishInterestsClick: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceListViewModel = viewModel(factory = PlaceListViewModel.Factory),
 ) {
@@ -67,6 +70,7 @@ fun PlaceListScreen(
           entries = emptyList(),
           onAddPlace = onAddPlace,
           onPlaceClick = onPlaceClick,
+          onDishInterestsClick = onDishInterestsClick,
           modifier = Modifier.padding(innerPadding),
         )
       is PlaceListUiState.Success ->
@@ -74,6 +78,7 @@ fun PlaceListScreen(
           entries = current.entries,
           onAddPlace = onAddPlace,
           onPlaceClick = onPlaceClick,
+          onDishInterestsClick = onDishInterestsClick,
           modifier = Modifier.padding(innerPadding),
         )
       is PlaceListUiState.Error ->
@@ -109,6 +114,7 @@ internal fun PlaceList(
   entries: List<PlaceEntryWithPlace>,
   onAddPlace: () -> Unit,
   onPlaceClick: (String) -> Unit,
+  onDishInterestsClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val colors = ForkloreTheme.colors
@@ -120,7 +126,14 @@ internal fun PlaceList(
       LedgerOutlinedFullWidthButton(
         text = "Add a place",
         onClick = onAddPlace,
-        modifier = Modifier.padding(vertical = 14.dp),
+        modifier = Modifier.padding(top = 14.dp),
+      )
+    }
+    item {
+      LedgerGhostButton(
+        text = "Dishes: want & never again",
+        onClick = onDishInterestsClick,
+        modifier = Modifier.padding(top = 12.dp, bottom = 14.dp).testTag("dish-interests-link"),
       )
     }
     if (entries.isEmpty()) {
@@ -173,5 +186,12 @@ internal fun PlaceList(
 @Preview(showBackground = true)
 @Composable
 private fun PlaceListEmptyPreview() {
-  ForkloreTheme { PlaceList(entries = emptyList(), onAddPlace = {}, onPlaceClick = {}) }
+  ForkloreTheme {
+    PlaceList(
+      entries = emptyList(),
+      onAddPlace = {},
+      onPlaceClick = {},
+      onDishInterestsClick = {},
+    )
+  }
 }

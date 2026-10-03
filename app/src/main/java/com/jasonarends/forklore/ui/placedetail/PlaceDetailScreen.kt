@@ -64,6 +64,8 @@ fun PlaceDetailScreen(
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
   dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
   visitsViewModel: VisitsViewModel = viewModel(factory = VisitsViewModel.factory(placeEntryId)),
+  interestsViewModel: DishInterestsViewModel =
+    viewModel(factory = DishInterestsViewModel.factory(placeEntryId)),
   opinionsViewModel: DishOpinionsViewModel =
     viewModel(factory = DishOpinionsViewModel.factory(placeEntryId)),
 ) {
@@ -100,6 +102,8 @@ fun PlaceDetailScreen(
         val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
         val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
         val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
+        val interestsState by interestsViewModel.uiState.collectAsStateWithLifecycle()
+        val interestDraft by interestsViewModel.draft.collectAsStateWithLifecycle()
         val opinionsState by opinionsViewModel.uiState.collectAsStateWithLifecycle()
         val opinionDraft by opinionsViewModel.draft.collectAsStateWithLifecycle()
         PlaceDetail(
@@ -145,6 +149,31 @@ fun PlaceDetailScreen(
               onQueryChange = dishesViewModel::onQueryChange,
               onAddDish = dishesViewModel::addDish,
               onAddAlias = dishesViewModel::addAlias,
+              dishInterests = { dishId ->
+                when (val interests = interestsState) {
+                  // The failure is reported once below the section, not repeated under every dish.
+                  DishInterestsUiState.Loading,
+                  is DishInterestsUiState.Error -> Unit
+                  is DishInterestsUiState.Success ->
+                    DishInterests(
+                      interests = interests.forDish(dishId),
+                      people = interests.people,
+                      draft = interestDraft?.takeIf { it.dishId == dishId },
+                      onStartAdd = { interestsViewModel.startAdd(dishId) },
+                      onStartEdit = interestsViewModel::startEdit,
+                      onCancelDraft = interestsViewModel::cancelDraft,
+                      onStatusChange = interestsViewModel::onStatusChange,
+                      onForPersonChange = interestsViewModel::onForPersonChange,
+                      onRecommendedByChange = interestsViewModel::onRecommendedByChange,
+                      onModificationChange = interestsViewModel::onModificationChange,
+                      onNoteChange = interestsViewModel::onNoteChange,
+                      onCreateForPerson = interestsViewModel::onCreateForPerson,
+                      onCreateRecommender = interestsViewModel::onCreateRecommender,
+                      onSave = interestsViewModel::save,
+                      onRemove = interestsViewModel::remove,
+                    )
+                }
+              },
               opinionsContent = { dishId ->
                 DishOpinionsBlock(
                   dishId = dishId,
@@ -164,6 +193,13 @@ fun PlaceDetailScreen(
                 )
               },
             )
+            (interestsState as? DishInterestsUiState.Error)?.let {
+              Text(
+                "Couldn't load dish interests: ${it.throwable.message}",
+                style = ForkloreType.fieldInput,
+                color = ForkloreTheme.colors.stamp,
+              )
+            }
           },
           modifier = Modifier.padding(innerPadding),
         )
@@ -264,11 +300,11 @@ internal fun PlaceDetail(
 
 /**
  * Every dish recorded at this place entry, plus the field that adds one. `internal` (not `private`)
- * so tests can exercise it directly rather than through the whole [PlaceDetail] column. [DishRow]'s
- * name row leaves a trailing slot for issue #7's per-dish status chip; [opinionsContent] fills the
- * space below it with issue #8's opinion cards. It's a slot keyed by dish id rather than
- * opinion-shaped parameters, so this composable stays ignorant of what an opinion is. Required, not
- * defaulted, for the same reason as [PlaceDetail]'s sections.
+ * so tests can exercise it directly rather than through the whole [PlaceDetail] column.
+ * [dishInterests] renders each dish's want / tried / never-again rows and editor (issue #7) under
+ * its aliases, and [opinionsContent] fills the space below them with issue #8's opinion cards. Both
+ * are slots keyed by dish id, so this composable stays ignorant of what an interest or an opinion
+ * is. Required, not defaulted, for the same reason as [PlaceDetail]'s sections.
  */
 @Composable
 internal fun DishesSection(
@@ -278,6 +314,7 @@ internal fun DishesSection(
   onQueryChange: (String) -> Unit,
   onAddDish: (String) -> Unit,
   onAddAlias: (dishId: String, alias: String) -> Unit,
+  dishInterests: @Composable (dishId: String) -> Unit,
   opinionsContent: @Composable (dishId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -300,6 +337,7 @@ internal fun DishesSection(
               DishRow(
                 dish = dish,
                 onAddAlias = { alias -> onAddAlias(dish.dish.id, alias) },
+                interests = { dishInterests(dish.dish.id) },
                 opinions = { opinionsContent(dish.dish.id) },
                 modifier = Modifier.testTag("dish-row-${dish.dish.id}"),
               )
@@ -327,6 +365,7 @@ internal fun DishesSection(
 private fun DishRow(
   dish: DishWithAliases,
   onAddAlias: (String) -> Unit,
+  interests: @Composable () -> Unit,
   opinions: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -343,6 +382,7 @@ private fun DishRow(
         modifier = Modifier.padding(top = 2.dp),
       )
     }
+    Column(modifier = Modifier.padding(top = 6.dp)) { interests() }
     opinions()
     AliasEntry(onAdd = onAddAlias, modifier = Modifier.padding(top = 6.dp))
   }
@@ -527,6 +567,7 @@ private fun PlaceDetailPopulatedPreview() {
             onQueryChange = {},
             onAddDish = {},
             onAddAlias = { _, _ -> },
+            dishInterests = {},
             opinionsContent = {},
           )
         },
@@ -567,6 +608,7 @@ private fun PlaceDetailEmptyPreview() {
             onQueryChange = {},
             onAddDish = {},
             onAddAlias = { _, _ -> },
+            dishInterests = {},
             opinionsContent = {},
           )
         },

@@ -10,6 +10,7 @@ import com.jasonarends.forklore.data.db.DishOpinionEntity
 import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.data.db.DishWithAliases
 import com.jasonarends.forklore.data.db.DishWithOpinions
+import com.jasonarends.forklore.data.db.ListedDishInterest
 import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.TemperatureRating
 import com.jasonarends.forklore.data.db.normalizeDishName
@@ -39,6 +40,10 @@ class DishRepository(
 
   fun observeByStatus(placeListId: String, status: DishStatus): Flow<List<DishInterestEntity>> =
     interestDao.observeByStatus(placeListId, status)
+
+  /** Every interest on one list, across all its places, with the names to display them. */
+  fun observeListedInterests(placeListId: String): Flow<List<ListedDishInterest>> =
+    interestDao.observeListedForList(placeListId)
 
   fun observeOpinions(dishId: String): Flow<List<DishOpinionEntity>> =
     opinionDao.observeForDish(dishId)
@@ -85,6 +90,13 @@ class DishRepository(
     )
   }
 
+  /**
+   * Records one stance on [dishId]. A dish can carry several — "Robin wants chicken" and "never
+   * again for anyone else" are two rows, not one overwritten — so this always inserts; use
+   * [updateInterest] to change one that exists. [modification] is trimmed and stored as null when
+   * blank: an empty string would read as "has instructions" to anything checking for null. [note]
+   * is stored verbatim (CLAUDE.md rule 4).
+   */
   suspend fun setInterest(
     dishId: String,
     status: DishStatus,
@@ -100,13 +112,46 @@ class DishRepository(
         status = status,
         forPersonId = forPersonId,
         recommendedById = recommendedById,
-        modification = modification,
+        modification = modification.blankToNull(),
         note = note,
         createdAt = now,
         updatedAt = now,
       )
     interestDao.insert(interest)
     return interest.id
+  }
+
+  /**
+   * Replaces every editable field of an existing interest: an editor saves the whole form, so
+   * passing null for [forPersonId] means "no longer for one person", not "leave it". A missing or
+   * already-removed interest is a no-op rather than being resurrected by a stale editor.
+   */
+  suspend fun updateInterest(
+    interestId: String,
+    status: DishStatus,
+    forPersonId: String?,
+    recommendedById: String?,
+    modification: String?,
+    note: String,
+  ) {
+    val current = interestDao.byId(interestId)?.takeIf { it.deletedAt == null } ?: return
+    interestDao.update(
+      current.copy(
+        status = status,
+        forPersonId = forPersonId,
+        recommendedById = recommendedById,
+        modification = modification.blankToNull(),
+        note = note,
+        updatedAt = clock.nowMillis(),
+      )
+    )
+  }
+
+  /** Soft delete (CLAUDE.md rule 7). Removing an already-removed interest keeps its first stamp. */
+  suspend fun removeInterest(interestId: String) {
+    val current = interestDao.byId(interestId)?.takeIf { it.deletedAt == null } ?: return
+    val now = clock.nowMillis()
+    interestDao.update(current.copy(deletedAt = now, updatedAt = now))
   }
 
   /**
@@ -187,6 +232,8 @@ class DishRepository(
     }
   }
 }
+
+private fun String?.blankToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 /**
  * An opinion tried to cite a visit that isn't one of its own place entry's. Its own type so a
