@@ -13,7 +13,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
@@ -106,6 +108,37 @@ class MainNavigationTest {
         .isNotEmpty()
     }
     composeTestRule.onNodeWithText("Add a place").assertDoesNotExist()
+  }
+
+  @Test
+  fun dishesLink_listsTheCurrentListsInterests_andATapOpensThatPlace() {
+    val app = ApplicationProvider.getApplicationContext<ForkloreApp>()
+    composeTestRule.setContent { ForkloreTheme { MainNavigation() } }
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      app.container.currentPlaceListId.value != null
+    }
+    val listId = app.container.currentPlaceListId.value!!
+    runBlocking {
+      val places = app.container.placeRepository
+      val dishes = app.container.dishRepository
+      val entry = places.addToList(listId, places.addPlace("Halberd"))
+      val dish = dishes.findOrCreateDish(entry, "Barrel Potatoes")
+      dishes.setInterest(dish, DishStatus.NEVER_AGAIN, modification = "no bread")
+    }
+
+    composeTestRule.onNodeWithText("Dishes: want & never again").performClick()
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("Barrel Potatoes").fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNodeWithText("no bread").assertExists()
+    composeTestRule.onNodeWithText("Add a place").assertDoesNotExist()
+
+    composeTestRule.onNodeWithText("Barrel Potatoes").performClick()
+
+    // Only PlaceDetailScreen's top bar carries this subtitle.
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("the receipts").fetchSemanticsNodes().isNotEmpty()
+    }
   }
 
   private fun addAPlace(name: String) {

@@ -10,7 +10,9 @@ import com.jasonarends.forklore.data.db.DishOpinionEntity
 import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.data.db.DishWithAliases
 import com.jasonarends.forklore.data.db.DishWithOpinions
+import com.jasonarends.forklore.data.db.ListedDishInterest
 import com.jasonarends.forklore.data.db.Rating
+import com.jasonarends.forklore.data.db.TemperatureRating
 import com.jasonarends.forklore.data.db.normalizeDishName
 import kotlinx.coroutines.flow.Flow
 
@@ -39,8 +41,16 @@ class DishRepository(
   fun observeByStatus(placeListId: String, status: DishStatus): Flow<List<DishInterestEntity>> =
     interestDao.observeByStatus(placeListId, status)
 
+  /** Every interest on one list, across all its places, with the names to display them. */
+  fun observeListedInterests(placeListId: String): Flow<List<ListedDishInterest>> =
+    interestDao.observeListedForList(placeListId)
+
   fun observeOpinions(dishId: String): Flow<List<DishOpinionEntity>> =
     opinionDao.observeForDish(dishId)
+
+  /** Every live opinion on every dish at [placeEntryId], oldest first. */
+  fun observeOpinionsForPlaceEntry(placeEntryId: String): Flow<List<DishOpinionEntity>> =
+    opinionDao.observeForPlaceEntry(placeEntryId)
 
   /**
    * Returns the existing dish if this place entry already has one under any recorded spelling,
@@ -80,6 +90,13 @@ class DishRepository(
     )
   }
 
+  /**
+   * Records one stance on [dishId]. A dish can carry several — "Robin wants chicken" and "never
+   * again for anyone else" are two rows, not one overwritten — so this always inserts; use
+   * [updateInterest] to change one that exists. [modification] is trimmed and stored as null when
+   * blank: an empty string would read as "has instructions" to anything checking for null. [note]
+   * is stored verbatim (CLAUDE.md rule 4).
+   */
   suspend fun setInterest(
     dishId: String,
     status: DishStatus,
@@ -95,7 +112,7 @@ class DishRepository(
         status = status,
         forPersonId = forPersonId,
         recommendedById = recommendedById,
-        modification = modification,
+        modification = modification.blankToNull(),
         note = note,
         createdAt = now,
         updatedAt = now,
@@ -104,13 +121,55 @@ class DishRepository(
     return interest.id
   }
 
+  /**
+   * Replaces every editable field of an existing interest: an editor saves the whole form, so
+   * passing null for [forPersonId] means "no longer for one person", not "leave it". A missing or
+   * already-removed interest is a no-op rather than being resurrected by a stale editor.
+   */
+  suspend fun updateInterest(
+    interestId: String,
+    status: DishStatus,
+    forPersonId: String?,
+    recommendedById: String?,
+    modification: String?,
+    note: String,
+  ) {
+    val current = interestDao.byId(interestId)?.takeIf { it.deletedAt == null } ?: return
+    interestDao.update(
+      current.copy(
+        status = status,
+        forPersonId = forPersonId,
+        recommendedById = recommendedById,
+        modification = modification.blankToNull(),
+        note = note,
+        updatedAt = clock.nowMillis(),
+      )
+    )
+  }
+
+  /** Soft delete (CLAUDE.md rule 7). Removing an already-removed interest keeps its first stamp. */
+  suspend fun removeInterest(interestId: String) {
+    val current = interestDao.byId(interestId)?.takeIf { it.deletedAt == null } ?: return
+    val now = clock.nowMillis()
+    interestDao.update(current.copy(deletedAt = now, updatedAt = now))
+  }
+
+  /**
+   * Adds one opinion row. Never looks for an existing opinion by [authorId]: the schema
+   * deliberately allows one author several opinions of a dish (a second visit, a changed mind), and
+   * two authors' rows are never merged (CLAUDE.md rule 5). [rating], [temperature] and [note] are
+   * all optional; nothing here requires any of them. [visitId], if given, must be one of this
+   * dish's own place entry's visits.
+   */
   suspend fun recordOpinion(
     dishId: String,
     authorId: String,
     rating: Rating?,
     note: String = "",
     visitId: String? = null,
+    temperature: TemperatureRating? = null,
   ): String {
+    requireVisitAtDishsEntry(dishId, visitId)
     val now = clock.nowMillis()
     val opinion =
       DishOpinionEntity(
@@ -118,6 +177,7 @@ class DishRepository(
         authorId = authorId,
         visitId = visitId,
         rating = rating,
+        temperature = temperature,
         note = note,
         createdAt = now,
         updatedAt = now,
@@ -125,4 +185,58 @@ class DishRepository(
     opinionDao.insert(opinion)
     return opinion.id
   }
+
+  /**
+   * Rewrites one opinion in place. The dish is fixed for the life of an opinion; everything else
+   * the editor shows may change, including [authorId] (fixing "I tapped the wrong person"). A
+   * missing or already-deleted opinion is a no-op rather than an error, so an edit racing a delete
+   * doesn't crash the screen.
+   */
+  suspend fun updateOpinion(
+    opinionId: String,
+    authorId: String,
+    rating: Rating?,
+    temperature: TemperatureRating?,
+    note: String,
+    visitId: String?,
+  ) {
+    val current = opinionDao.byId(opinionId)?.takeIf { it.deletedAt == null } ?: return
+    // Re-validating an unchanged link would reject an opinion whose visit was deleted since it was
+    // written, blocking any other edit to it.
+    if (visitId != current.visitId) requireVisitAtDishsEntry(current.dishId, visitId)
+    opinionDao.update(
+      current.copy(
+        authorId = authorId,
+        visitId = visitId,
+        rating = rating,
+        temperature = temperature,
+        note = note,
+        updatedAt = clock.nowMillis(),
+      )
+    )
+  }
+
+  /** Soft delete: the tombstone is what sync propagates (CLAUDE.md rule 7). */
+  suspend fun deleteOpinion(opinionId: String) {
+    val current = opinionDao.byId(opinionId)?.takeIf { it.deletedAt == null } ?: return
+    val now = clock.nowMillis()
+    opinionDao.update(current.copy(deletedAt = now, updatedAt = now))
+  }
+
+  private suspend fun requireVisitAtDishsEntry(dishId: String, visitId: String?) {
+    if (visitId == null) return
+    if (opinionDao.countVisitAtDishsEntry(dishId, visitId) == 0) {
+      throw VisitOutsidePlaceEntryException(
+        "Visit $visitId is not a live visit at the same place entry as dish $dishId"
+      )
+    }
+  }
 }
+
+private fun String?.blankToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
+/**
+ * An opinion tried to cite a visit that isn't one of its own place entry's. Its own type so a
+ * caller can tell this apart from any other [IllegalArgumentException] a write might raise.
+ */
+class VisitOutsidePlaceEntryException(message: String) : IllegalArgumentException(message)
