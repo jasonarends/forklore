@@ -22,8 +22,7 @@ import com.jasonarends.forklore.ui.theme.tilt
  * issue #15's `.a-chip`/`.a-chip.done`. Shared by every mutually-exclusive picker ([ChoiceChips]) —
  * [role] defaults to [Role.RadioButton] for that single-select case, but [PersonPicker]'s
  * multi-select passes [Role.Checkbox] so TalkBack doesn't announce a "pick one" chip as a "pick one
- * of many" — and the read-only pending/done statuses in `StatusChip.kt`. [quiet] thins an
- * unselected chip's border for a secondary group, with no new colour: the ink is already `ink2`.
+ * of many" — and the read-only pending/done statuses in `StatusChip.kt`.
  * [minimumInteractiveComponentSize] restores the ≥48dp touch target `FilterChip`/`TextButton` gave
  * for free before this direction replaced them with a bare `Surface`.
  */
@@ -35,7 +34,6 @@ internal fun LedgerChip(
   modifier: Modifier = Modifier,
   icon: LedgerGlyph? = null,
   role: Role = Role.RadioButton,
-  quiet: Boolean = false,
 ) {
   val colors = ForkloreTheme.colors
   val borderColor = if (selected) colors.ink else colors.ink2
@@ -51,7 +49,7 @@ internal fun LedgerChip(
     shape = RoundedCornerShape(3.dp),
     color = fill,
     contentColor = contentColor,
-    border = BorderStroke(if (quiet && !selected) 1.dp else 1.5.dp, borderColor),
+    border = BorderStroke(1.5.dp, borderColor),
   ) {
     Row(
       modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

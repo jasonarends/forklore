@@ -171,6 +171,28 @@ class PersonRepositoryTest {
   }
 
   @Test
+  fun findOrCreate_upgradesALiveOutsider_whenTheHouseholdBoxIsTicked() = runTest {
+    val id = repository.findOrCreate("Robin", isHouseholdMember = false)
+    now = 4_000L
+
+    val again = repository.findOrCreate("robin", isHouseholdMember = true)
+
+    assertEquals(id, again)
+    val stored = db.personDao().byId(id)!!
+    assertTrue(stored.isHouseholdMember)
+    assertEquals(4_000L, stored.updatedAt)
+  }
+
+  @Test
+  fun findOrCreate_neverDemotesAHouseholdMember_whenTheBoxIsUnticked() = runTest {
+    val id = repository.findOrCreate("Robin", isHouseholdMember = true)
+
+    repository.findOrCreate("robin", isHouseholdMember = false)
+
+    assertTrue(db.personDao().byId(id)!!.isHouseholdMember)
+  }
+
+  @Test
   fun setHouseholdMember_togglesTheFlagAndStampsUpdatedAt() = runTest {
     val id = repository.findOrCreate("Robin", isHouseholdMember = false)
     now = 3_000L

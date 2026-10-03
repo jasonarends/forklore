@@ -10,7 +10,6 @@ import com.jasonarends.forklore.data.db.PlaceListEntity
 import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.DishRepository
 import com.jasonarends.forklore.data.repository.PersonRepository
-import com.jasonarends.forklore.data.repository.VisitRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
 import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.first
@@ -244,25 +243,6 @@ class DishInterestsViewModelTest {
         false,
         db.personDao().byNormalizedNameIncludingDeleted("robin")!!.isHouseholdMember,
       )
-    }
-
-  @Test
-  fun aRecommenderAddedInTheInterestEditor_isSelectableAsAVisitAttendee() =
-    runTest(testDispatcher) {
-      val interests = viewModel()
-      interests.startAdd(dishId)
-      interests.onCreateRecommender("Marvin", false)
-      advanceUntilIdle()
-
-      val visits =
-        VisitsViewModel(VisitRepository(db, db.visitDao(), Clock { 0L }), personRepository, entryId)
-      backgroundScope.launch { visits.uiState.collect {} }
-      visits.startAdd()
-      val marvin =
-        (visits.uiState.value as VisitsUiState.Success).people.single { it.name == "Marvin" }
-      visits.onAttendeesChange(setOf(marvin.id))
-
-      assertEquals(setOf(marvin.id), visits.draft.value!!.attendees)
     }
 
   @Test

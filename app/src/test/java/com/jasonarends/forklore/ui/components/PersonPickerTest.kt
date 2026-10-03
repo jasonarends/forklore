@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -127,7 +128,7 @@ class PersonPickerTest {
   }
 
   @Test
-  fun aSelectedOutsiderIsShown() {
+  fun aSelectedOutsiderIsShownSelected_andAnAllOutsidersListHasNoOthersLabel() {
     val dale = person("Dale", household = false)
 
     compose.setContent {
@@ -141,7 +142,8 @@ class PersonPickerTest {
       }
     }
 
-    compose.onNodeWithTag("person-picker-chip-${dale.id}").assertExists()
+    compose.onNodeWithTag("person-picker-chip-${dale.id}").assertIsSelected()
+    compose.onAllNodesWithText("Others").assertCountEquals(0)
   }
 
   @Test

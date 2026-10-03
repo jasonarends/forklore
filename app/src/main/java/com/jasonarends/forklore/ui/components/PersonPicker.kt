@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,8 +26,8 @@ import com.jasonarends.forklore.ui.theme.ForkloreType
 
 /**
  * Picks people from [people]. Everyone is always shown — household members first, then everyone
- * else in a quieter group under an "Others" label — so a person added from one picker is never
- * hidden from another. Shared by every screen that cites a person — visit attendees, a
+ * else after them (under an "Others" label when both exist) — so a person added from one picker is
+ * never hidden from another. Shared by every screen that cites a person — visit attendees, a
  * person-scoped want, a recommender, an opinion's author — so it supports both single and multi
  * select rather than each caller reimplementing selection.
  *
@@ -58,11 +56,10 @@ fun PersonPicker(
   var newIsHousehold by remember { mutableStateOf(false) }
   val colors = ForkloreTheme.colors
 
-  val household = people.filter { it.isHouseholdMember }
-  val others = people.filterNot { it.isHouseholdMember }
+  val (household, others) = people.partition { it.isHouseholdMember }
 
   @Composable
-  fun Chips(group: List<PersonEntity>, quiet: Boolean) {
+  fun Chips(group: List<PersonEntity>) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       group.forEach { person ->
         val isSelected = person.id in selected
@@ -81,18 +78,17 @@ fun PersonPicker(
           },
           modifier = Modifier.testTag("person-picker-chip-${person.id}"),
           role = if (multiSelect) Role.Checkbox else Role.RadioButton,
-          quiet = quiet,
         )
       }
     }
   }
 
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    if (household.isNotEmpty()) Chips(household, quiet = false)
-    if (others.isNotEmpty()) {
+    if (household.isNotEmpty()) Chips(household)
+    if (household.isNotEmpty() && others.isNotEmpty()) {
       UppercaseLabel(text = "Others", style = ForkloreType.fieldLabel, color = colors.ink2)
-      Chips(others, quiet = true)
     }
+    if (others.isNotEmpty()) Chips(others)
     Row(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -118,20 +114,11 @@ fun PersonPicker(
         Text("Add")
       }
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Checkbox(
-        modifier = Modifier.testTag("person-picker-new-household"),
-        checked = newIsHousehold,
-        onCheckedChange = { newIsHousehold = it },
-        colors =
-          CheckboxDefaults.colors(
-            checkedColor = colors.ink,
-            checkmarkColor = colors.card,
-            uncheckedColor = colors.ink2,
-          ),
-      )
-      Text("Household member", style = ForkloreType.topBarSubtitle, color = colors.ink2)
-    }
+    HouseholdCheckbox(
+      checked = newIsHousehold,
+      onCheckedChange = { newIsHousehold = it },
+      modifier = Modifier.testTag("person-picker-new-household"),
+    )
   }
 }
 

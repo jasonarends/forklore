@@ -140,6 +140,25 @@ class VisitsSectionTest {
   }
 
   @Test
+  fun aNonHouseholdPerson_isOfferedAsAnAttendee_withNoRevealStep() {
+    val dale =
+      PersonEntity(
+        name = "Dale",
+        normalizedName = "dale",
+        isHouseholdMember = false,
+        createdAt = 0,
+        updatedAt = 0,
+      )
+    val draftState = mutableStateOf<VisitDraft?>(null)
+    compose.setVisitsSectionContent(draftState, people = listOf(dale))
+
+    compose.onNodeWithTag("visits-add-button").performClick()
+    compose.onNodeWithTag("person-picker-chip-${dale.id}").performScrollTo().performClick()
+
+    assertEquals(setOf(dale.id), draftState.value?.attendees)
+  }
+
+  @Test
   fun cancellingTheForm_closesItWithoutSaving() {
     val draftState = mutableStateOf<VisitDraft?>(null)
     var saveCount = 0

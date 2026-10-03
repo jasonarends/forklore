@@ -95,7 +95,6 @@ class DishInterestsViewModel(
   fun onCreateRecommender(name: String, isHouseholdMember: Boolean) =
     createPerson(name, isHouseholdMember) { id -> onRecommendedByChange(id) }
 
-  /** The two fields differ only in which one the new person is selected into. */
   private fun createPerson(name: String, isHouseholdMember: Boolean, select: (String) -> Unit) {
     viewModelScope.launch {
       try {
