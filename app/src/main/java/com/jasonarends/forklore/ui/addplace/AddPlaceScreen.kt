@@ -19,11 +19,14 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jasonarends.forklore.data.db.DogPolicy
+import com.jasonarends.forklore.ui.components.DogPolicyPicker
 import com.jasonarends.forklore.ui.components.LedgerGhostButton
 import com.jasonarends.forklore.ui.components.LedgerPrimaryButton
 import com.jasonarends.forklore.ui.components.LedgerTextField
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.NoteField
+import com.jasonarends.forklore.ui.components.SectionHeader
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 
 /**
@@ -61,6 +64,7 @@ fun AddPlaceScreen(
       onAddressChange = viewModel::onAddressChange,
       onNoteChange = viewModel::onNoteChange,
       onWarningChange = viewModel::onWarningChange,
+      onDogPolicyChange = viewModel::onDogPolicyChange,
       onSave = viewModel::save,
       onCancel = onCancel,
       modifier = Modifier.padding(innerPadding),
@@ -78,6 +82,7 @@ internal fun AddPlaceForm(
   onAddressChange: (String) -> Unit,
   onNoteChange: (String) -> Unit,
   onWarningChange: (String) -> Unit,
+  onDogPolicyChange: (DogPolicy?) -> Unit,
   onSave: () -> Unit,
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
@@ -110,6 +115,9 @@ internal fun AddPlaceForm(
       label = "Warning",
       warning = true,
     )
+    // Beside the warning because both describe the restaurant, not our opinion of it.
+    SectionHeader("Dogs")
+    DogPolicyPicker(dogPolicy = state.dogPolicy, onDogPolicyChange = onDogPolicyChange)
     state.error?.let { Text(it, color = ForkloreTheme.colors.stamp) }
     Row(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -137,6 +145,7 @@ private fun AddPlaceFormPreview() {
       onAddressChange = {},
       onNoteChange = {},
       onWarningChange = {},
+      onDogPolicyChange = {},
       onSave = {},
       onCancel = {},
     )

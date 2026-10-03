@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -30,6 +31,7 @@ class AddPlaceFormTest {
           onAddressChange = {},
           onNoteChange = {},
           onWarningChange = {},
+          onDogPolicyChange = {},
           onSave = {},
           onCancel = {},
         )
@@ -52,6 +54,7 @@ class AddPlaceFormTest {
           onAddressChange = {},
           onNoteChange = {},
           onWarningChange = {},
+          onDogPolicyChange = {},
           onSave = {},
           onCancel = {},
         )
@@ -76,6 +79,7 @@ class AddPlaceFormTest {
           onAddressChange = {},
           onNoteChange = {},
           onWarningChange = {},
+          onDogPolicyChange = {},
           onSave = { saved = true },
           onCancel = {},
         )
@@ -99,6 +103,7 @@ class AddPlaceFormTest {
           onAddressChange = {},
           onNoteChange = {},
           onWarningChange = {},
+          onDogPolicyChange = {},
           onSave = {},
           onCancel = {},
         )
@@ -120,6 +125,7 @@ class AddPlaceFormTest {
           onAddressChange = {},
           onNoteChange = {},
           onWarningChange = {},
+          onDogPolicyChange = {},
           onSave = {},
           onCancel = {},
         )
@@ -142,6 +148,7 @@ class AddPlaceFormTest {
           onAddressChange = {},
           onNoteChange = {},
           onWarningChange = {},
+          onDogPolicyChange = {},
           onSave = {},
           onCancel = { cancelled = true },
         )
@@ -151,5 +158,37 @@ class AddPlaceFormTest {
     composeTestRule.onNodeWithText("Cancel").performScrollTo().performClick()
 
     assertEquals(true, cancelled)
+  }
+
+  @Test
+  fun pickingADogPolicy_reportsIt_andNotRecordedClearsIt() {
+    val reported = mutableListOf<DogPolicy?>()
+    composeTestRule.setContent {
+      ForkloreTheme {
+        AddPlaceForm(
+          state = AddPlaceUiState(name = "Halberd"),
+          placeListReady = true,
+          onNameChange = {},
+          onBranchLabelChange = {},
+          onAddressChange = {},
+          onNoteChange = {},
+          onWarningChange = {},
+          onDogPolicyChange = { reported += it },
+          onSave = {},
+          onCancel = {},
+        )
+      }
+    }
+
+    composeTestRule
+      .onNodeWithText("Dogs inside", ignoreCase = true)
+      .performScrollTo()
+      .performClick()
+    composeTestRule
+      .onNodeWithText("Not recorded", ignoreCase = true)
+      .performScrollTo()
+      .performClick()
+
+    assertEquals(listOf(DogPolicy.INSIDE, null), reported)
   }
 }

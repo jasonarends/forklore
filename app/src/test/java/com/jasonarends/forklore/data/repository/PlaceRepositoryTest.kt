@@ -3,6 +3,7 @@ package com.jasonarends.forklore.data.repository
 import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceListEntity
 import com.jasonarends.forklore.data.db.PlaceStatus
@@ -189,6 +190,53 @@ class PlaceRepositoryTest {
   fun updateEntry_doesNothing_forAnEntryThatDoesNotExist() = runTest {
     // Must not throw: a stale nav destination pointing at a deleted entry is a real scenario.
     repository.updateEntry("no-such-entry") { it.copy(status = PlaceStatus.AVOID) }
+  }
+
+  @Test
+  fun addPlaceToList_persistsTheDogPolicy_andDefaultsToNotRecorded() = runTest {
+    repository.addPlaceToList(placeListId = listId, name = "Halberd", dogPolicy = DogPolicy.INSIDE)
+    repository.addPlaceToList(placeListId = listId, name = "Aioe")
+
+    val byName = repository.observeList(listId).first().associateBy { it.place.name }
+
+    assertEquals(DogPolicy.INSIDE, byName.getValue("Halberd").place.dogPolicy)
+    // Not recorded is null, not NO: nobody having asked must stay distinguishable from "no dogs".
+    assertNull(byName.getValue("Aioe").place.dogPolicy)
+  }
+
+  @Test
+  fun setDogPolicy_setsChangesAndClears_stampingUpdatedAtEachTime() = runTest {
+    val placeId = repository.addPlace("Halberd", warning = "cash only")
+    val entryId = repository.addToList(listId, placeId)
+
+    for (policy in listOf(DogPolicy.PATIO, DogPolicy.NO, null)) {
+      now += 60_000L
+      repository.setDogPolicy(placeId, policy)
+
+      val place = repository.observeEntry(entryId).first()!!.place
+      assertEquals(policy, place.dogPolicy)
+      assertEquals(now, place.updatedAt)
+    }
+  }
+
+  @Test
+  fun setDogPolicy_leavesTheRestOfThePlaceAlone() = runTest {
+    val placeId = repository.addPlace("Halberd", "Westport", "1 Way St", "cash only")
+    val entryId = repository.addToList(listId, placeId, note = "great patio")
+
+    repository.setDogPolicy(placeId, DogPolicy.PATIO)
+
+    val entry = repository.observeEntry(entryId).first()!!
+    assertEquals("Halberd", entry.place.name)
+    assertEquals("Westport", entry.place.branchLabel)
+    assertEquals("1 Way St", entry.place.address)
+    assertEquals("cash only", entry.place.warning)
+    assertEquals("great patio", entry.entry.note)
+  }
+
+  @Test
+  fun setDogPolicy_doesNothing_forAPlaceThatDoesNotExist() = runTest {
+    repository.setDogPolicy("no-such-place", DogPolicy.PATIO)
   }
 
   private companion object {

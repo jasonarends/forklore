@@ -1,6 +1,7 @@
 package com.jasonarends.forklore.data.repository
 
 import androidx.room.withTransaction
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.db.ForkloreDatabase
 import com.jasonarends.forklore.data.db.PlaceDao
 import com.jasonarends.forklore.data.db.PlaceEntity
@@ -38,14 +39,16 @@ class PlaceRepository(
   /**
    * [note] is deliberately not a parameter here: a [PlaceEntity] is global across every list that
    * includes it (see CLAUDE.md rule 6), so free text a person writes when adding a place belongs on
-   * their list's [PlaceEntryEntity], via [addToList], not here. [warning] stays on the place — it
-   * documents the restaurant itself (a pricing or policy gotcha), not one list's opinion of it.
+   * their list's [PlaceEntryEntity], via [addToList], not here. [warning] and [dogPolicy] stay on
+   * the place — they document the restaurant itself (a pricing or policy gotcha, whether dogs are
+   * welcome), not one list's opinion of it. A null [dogPolicy] means nobody has recorded it.
    */
   suspend fun addPlace(
     name: String,
     branchLabel: String? = null,
     address: String? = null,
     warning: String? = null,
+    dogPolicy: DogPolicy? = null,
   ): String {
     val now = clock.nowMillis()
     val place =
@@ -54,6 +57,7 @@ class PlaceRepository(
         branchLabel = branchLabel,
         address = address,
         warning = warning,
+        dogPolicy = dogPolicy,
         createdAt = now,
         updatedAt = now,
       )
@@ -95,9 +99,22 @@ class PlaceRepository(
     address: String? = null,
     note: String = "",
     warning: String? = null,
+    dogPolicy: DogPolicy? = null,
   ): String = database.withTransaction {
-    val placeId = addPlace(name, branchLabel, address, warning)
+    val placeId = addPlace(name, branchLabel, address, warning, dogPolicy)
     addToList(placeListId, placeId, note = note)
+  }
+
+  /**
+   * Sets or clears (`null`) what is known about dogs at [placeId]. Writes the global [PlaceEntity],
+   * so every list that includes the place sees the change — see [addPlace]. Read-modify-write in a
+   * transaction, like [updateEntry], so it can't revert a concurrent write to another column.
+   */
+  suspend fun setDogPolicy(placeId: String, dogPolicy: DogPolicy?) {
+    database.withTransaction {
+      val current = placeDao.byId(placeId) ?: return@withTransaction
+      placeDao.update(current.copy(dogPolicy = dogPolicy, updatedAt = clock.nowMillis()))
+    }
   }
 
   /**

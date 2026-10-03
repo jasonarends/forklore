@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jasonarends.forklore.ForkloreApp
+import com.jasonarends.forklore.data.db.DogPolicy
 import com.jasonarends.forklore.data.repository.PlaceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -59,6 +60,10 @@ class AddPlaceViewModel(
     _uiState.update { it.copy(warning = value, error = null) }
   }
 
+  fun onDogPolicyChange(value: DogPolicy?) {
+    _uiState.update { it.copy(dogPolicy = value, error = null) }
+  }
+
   /**
    * No-op on a blank name, a not-yet-ready list, or a save already in flight — the Save button is
    * disabled for all three, but a double tap can still land two calls here before the first
@@ -81,6 +86,7 @@ class AddPlaceViewModel(
           address = state.address.trim().ifBlank { null },
           note = state.note,
           warning = state.warning.trim().ifBlank { null },
+          dogPolicy = state.dogPolicy,
         )
         _uiState.update { it.copy(saving = false, saved = true) }
       } catch (_: SQLiteException) {
@@ -107,6 +113,7 @@ data class AddPlaceUiState(
   val address: String = "",
   val note: String = "",
   val warning: String = "",
+  val dogPolicy: DogPolicy? = null,
   val saving: Boolean = false,
   val saved: Boolean = false,
   val error: String? = null,
