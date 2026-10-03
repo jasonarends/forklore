@@ -85,8 +85,8 @@ class DishInterestsSectionTest {
             onRecommendedByChange = { events.log += "recommendedBy $it" },
             onModificationChange = { events.log += "modification $it" },
             onNoteChange = { events.log += "note $it" },
-            onCreateForPerson = { events.log += "createFor $it" },
-            onCreateRecommender = { events.log += "createRecommender $it" },
+            onCreateForPerson = { name, hh -> events.log += "createFor $name $hh" },
+            onCreateRecommender = { name, hh -> events.log += "createRecommender $name $hh" },
             onSave = { events.log += "save" },
             onRemove = { events.log += "remove" },
           )
@@ -173,8 +173,8 @@ class DishInterestsSectionTest {
             onRecommendedByChange = { draft = draft?.copy(recommendedById = it) },
             onModificationChange = { draft = draft?.copy(modification = it) },
             onNoteChange = { draft = draft?.copy(note = it) },
-            onCreateForPerson = {},
-            onCreateRecommender = {},
+            onCreateForPerson = { _, _ -> },
+            onCreateRecommender = { _, _ -> },
             onSave = { saved = draft },
             onRemove = {},
           )
@@ -193,6 +193,7 @@ class DishInterestsSectionTest {
         hasTestTag("person-picker-chip-${dale.id}") and
           hasAnyAncestor(hasTestTag("interest-recommended-by"))
       )
+      .performScrollTo()
       .performClick()
     compose.onNodeWithTag("interest-modification").performScrollTo().performTextInput("chopped")
     compose
@@ -215,21 +216,14 @@ class DishInterestsSectionTest {
   }
 
   @Test
-  fun aRecommenderWhoIsntInTheHousehold_isVisibleWithoutDiggingForThem() {
+  fun aPersonOutsideTheHousehold_isOfferedInEveryPickerWithoutDiggingForThem() {
     setContent(interests = emptyList(), draft = InterestDraft(dishId = "dish"))
 
-    compose
-      .onNode(
-        hasTestTag("person-picker-chip-${dale.id}") and
-          hasAnyAncestor(hasTestTag("interest-recommended-by"))
-      )
-      .assertExists()
-    // The "for" picker keeps the household-only default; Dale isn't offered there.
-    compose
-      .onNode(
-        hasTestTag("person-picker-chip-${dale.id}") and hasAnyAncestor(hasTestTag("interest-for"))
-      )
-      .assertDoesNotExist()
+    for (picker in listOf("interest-for", "interest-recommended-by")) {
+      compose
+        .onNode(hasTestTag("person-picker-chip-${dale.id}") and hasAnyAncestor(hasTestTag(picker)))
+        .assertExists()
+    }
   }
 
   @Test
@@ -311,8 +305,8 @@ class DishInterestsSectionTest {
             onRecommendedByChange = {},
             onModificationChange = { draft = draft?.copy(modification = it) },
             onNoteChange = {},
-            onCreateForPerson = {},
-            onCreateRecommender = {},
+            onCreateForPerson = { _, _ -> },
+            onCreateRecommender = { _, _ -> },
             onSave = {
               val d = draft!!
               interests =

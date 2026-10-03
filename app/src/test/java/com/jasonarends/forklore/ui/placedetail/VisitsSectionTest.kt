@@ -164,7 +164,7 @@ class VisitsSectionTest {
     visits: List<VisitWithAttendees> = emptyList(),
     people: List<PersonEntity> = emptyList(),
     onStartEdit: (VisitWithAttendees) -> Unit = {},
-    onCreatePerson: (String) -> Unit = {},
+    onCreatePerson: (String, Boolean) -> Unit = { _, _ -> },
     onSaveVisit: () -> Unit = {},
   ) {
     setContent {

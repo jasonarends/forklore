@@ -10,6 +10,7 @@ import com.jasonarends.forklore.data.db.PlaceListEntity
 import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.DishRepository
 import com.jasonarends.forklore.data.repository.PersonRepository
+import com.jasonarends.forklore.data.repository.VisitRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
 import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.first
@@ -213,14 +214,55 @@ class DishInterestsViewModelTest {
       val viewModel = viewModel()
       viewModel.startAdd(dishId)
 
-      viewModel.onCreateRecommender("Marvin")
+      viewModel.onCreateRecommender("Marvin", false)
       advanceUntilIdle()
-      viewModel.onCreateForPerson("Robin")
+      viewModel.onCreateForPerson("Robin", true)
       advanceUntilIdle()
 
       val people = viewModel.success().people.associateBy { it.name }
       assertEquals(people.getValue("Marvin").id, viewModel.draft.value!!.recommendedById)
       assertEquals(people.getValue("Robin").id, viewModel.draft.value!!.forPersonId)
+    }
+
+  @Test
+  fun householdMembership_isTheUsersChoice_notWhichPickerCreatedThePerson() =
+    runTest(testDispatcher) {
+      val viewModel = viewModel()
+      viewModel.startAdd(dishId)
+
+      // The opposite of what each picker used to imply: a recommender who is household, a "for"
+      // person who isn't.
+      viewModel.onCreateRecommender("Marvin", true)
+      viewModel.onCreateForPerson("Robin", false)
+      advanceUntilIdle()
+
+      assertEquals(
+        true,
+        db.personDao().byNormalizedNameIncludingDeleted("marvin")!!.isHouseholdMember,
+      )
+      assertEquals(
+        false,
+        db.personDao().byNormalizedNameIncludingDeleted("robin")!!.isHouseholdMember,
+      )
+    }
+
+  @Test
+  fun aRecommenderAddedInTheInterestEditor_isSelectableAsAVisitAttendee() =
+    runTest(testDispatcher) {
+      val interests = viewModel()
+      interests.startAdd(dishId)
+      interests.onCreateRecommender("Marvin", false)
+      advanceUntilIdle()
+
+      val visits =
+        VisitsViewModel(VisitRepository(db, db.visitDao(), Clock { 0L }), personRepository, entryId)
+      backgroundScope.launch { visits.uiState.collect {} }
+      visits.startAdd()
+      val marvin =
+        (visits.uiState.value as VisitsUiState.Success).people.single { it.name == "Marvin" }
+      visits.onAttendeesChange(setOf(marvin.id))
+
+      assertEquals(setOf(marvin.id), visits.draft.value!!.attendees)
     }
 
   @Test

@@ -3,7 +3,10 @@ package com.jasonarends.forklore.ui.components
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -32,7 +35,7 @@ class PersonPickerTest {
           people = listOf(robin, dale),
           selected = selected,
           onSelectionChange = { selected = it },
-          onCreatePerson = {},
+          onCreatePerson = { _, _ -> },
         )
       }
     }
@@ -59,7 +62,7 @@ class PersonPickerTest {
           people = listOf(robin, dale),
           selected = selected,
           onSelectionChange = { selected = it },
-          onCreatePerson = {},
+          onCreatePerson = { _, _ -> },
           multiSelect = false,
         )
       }
@@ -76,7 +79,7 @@ class PersonPickerTest {
   }
 
   @Test
-  fun householdMembersShowByDefault_outsideRecommendersAreHidden() {
+  fun everyoneIsVisible_withNoRevealStep() {
     val ana = person("Ana", household = true)
     val dale = person("Dale", household = false)
 
@@ -86,38 +89,45 @@ class PersonPickerTest {
           people = listOf(ana, dale),
           selected = emptySet(),
           onSelectionChange = {},
-          onCreatePerson = {},
+          onCreatePerson = { _, _ -> },
         )
       }
     }
 
     compose.onNodeWithTag("person-picker-chip-${ana.id}").assertExists()
-    compose.onNodeWithTag("person-picker-chip-${dale.id}").assertDoesNotExist()
+    compose.onNodeWithTag("person-picker-chip-${dale.id}").assertExists()
+    compose.onNodeWithText("Others").assertExists()
+    compose.onAllNodesWithText("Show everyone", substring = true).assertCountEquals(0)
   }
 
   @Test
-  fun revealingShowsOutsideRecommenders() {
-    val ana = person("Ana", household = true)
+  fun householdMembersComeFirst_thenEveryoneElse_whateverTheInputOrder() {
     val dale = person("Dale", household = false)
+    val ana = person("Ana", household = true)
+    val marvin = person("Marvin", household = false)
+    val robin = person("Robin", household = true)
 
     compose.setContent {
       ForkloreTheme {
         PersonPicker(
-          people = listOf(ana, dale),
+          people = listOf(dale, ana, marvin, robin),
           selected = emptySet(),
           onSelectionChange = {},
-          onCreatePerson = {},
+          onCreatePerson = { _, _ -> },
         )
       }
     }
 
-    compose.onNodeWithText("Show everyone (1 more)").performClick()
-
-    compose.onNodeWithTag("person-picker-chip-${dale.id}").assertExists()
+    val order =
+      listOf(dale, ana, marvin, robin)
+        .map { it to compose.onNodeWithTag("person-picker-chip-${it.id}").fetchSemanticsNode() }
+        .sortedWith(compareBy({ it.second.boundsInRoot.top }, { it.second.boundsInRoot.left }))
+        .map { it.first.name }
+    assertEquals(listOf("Ana", "Robin", "Dale", "Marvin"), order)
   }
 
   @Test
-  fun aSelectedOutsiderStaysVisibleWithoutRevealingEveryone() {
+  fun aSelectedOutsiderIsShown() {
     val dale = person("Dale", household = false)
 
     compose.setContent {
@@ -126,7 +136,7 @@ class PersonPickerTest {
           people = listOf(dale),
           selected = setOf(dale.id),
           onSelectionChange = {},
-          onCreatePerson = {},
+          onCreatePerson = { _, _ -> },
         )
       }
     }
@@ -136,7 +146,7 @@ class PersonPickerTest {
 
   @Test
   fun typingANewNameAndTappingAddCreatesAPersonAndClearsTheField() {
-    var created: String? = null
+    var created: Pair<String, Boolean>? = null
 
     compose.setContent {
       ForkloreTheme {
@@ -144,7 +154,7 @@ class PersonPickerTest {
           people = emptyList(),
           selected = emptySet(),
           onSelectionChange = {},
-          onCreatePerson = { created = it },
+          onCreatePerson = { name, household -> created = name to household },
         )
       }
     }
@@ -152,14 +162,13 @@ class PersonPickerTest {
     compose.onNodeWithTag("person-picker-new-name").performTextInput("  Casey  ")
     compose.onNodeWithText("Add").performClick()
 
-    assertEquals("Casey", created)
+    assertEquals("Casey" to false, created)
   }
 
   @Test
-  fun aNewlyCreatedOutsiderStaysVisibleWhenTheCallerSelectsThem() {
+  fun aNewlyCreatedOutsiderAppearsSelectedWhenTheCallerSelectsThem() {
     // Simulates the contract PersonPicker's KDoc requires of callers: onCreatePerson resolves
-    // findOrCreate and adds the resulting id to `selected` itself, so a non-household person
-    // created while the household filter is on doesn't vanish behind "Show everyone".
+    // findOrCreate and adds the resulting id to `selected` itself.
     val casey = person("Casey", household = false)
     var people by mutableStateOf(emptyList<PersonEntity>())
     var selected by mutableStateOf(setOf<String>())
@@ -170,7 +179,7 @@ class PersonPickerTest {
           people = people,
           selected = selected,
           onSelectionChange = { selected = it },
-          onCreatePerson = {
+          onCreatePerson = { _, _ ->
             people = people + casey
             selected = setOf(casey.id)
           },
@@ -182,6 +191,30 @@ class PersonPickerTest {
     compose.onNodeWithText("Add").performClick()
 
     compose.onNodeWithTag("person-picker-chip-${casey.id}").assertExists()
+  }
+
+  @Test
+  fun theHouseholdBoxDefaultsOff_andIsPassedThroughThenResets() {
+    val created = mutableListOf<Pair<String, Boolean>>()
+
+    compose.setContent {
+      ForkloreTheme {
+        PersonPicker(
+          people = emptyList(),
+          selected = emptySet(),
+          onSelectionChange = {},
+          onCreatePerson = { name, household -> created += name to household },
+        )
+      }
+    }
+
+    compose.onNodeWithTag("person-picker-new-name").performTextInput("Robin")
+    compose.onNodeWithTag("person-picker-new-household").performClick()
+    compose.onNodeWithText("Add").performClick()
+    compose.onNodeWithTag("person-picker-new-name").performTextInput("Dale")
+    compose.onNodeWithText("Add").performClick()
+
+    assertEquals(listOf("Robin" to true, "Dale" to false), created)
   }
 
   private fun person(name: String, household: Boolean): PersonEntity =

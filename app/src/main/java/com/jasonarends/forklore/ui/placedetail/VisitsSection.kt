@@ -61,7 +61,7 @@ internal fun VisitsSection(
   onMealChange: (Meal?) -> Unit,
   onNoteChange: (String) -> Unit,
   onAttendeesChange: (Set<String>) -> Unit,
-  onCreatePerson: (String) -> Unit,
+  onCreatePerson: (String, Boolean) -> Unit,
   onSaveVisit: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -170,7 +170,7 @@ private fun VisitForm(
   onMealChange: (Meal?) -> Unit,
   onNoteChange: (String) -> Unit,
   onAttendeesChange: (Set<String>) -> Unit,
-  onCreatePerson: (String) -> Unit,
+  onCreatePerson: (String, Boolean) -> Unit,
   onSave: () -> Unit,
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
@@ -289,7 +289,7 @@ private fun VisitsSectionPreview() {
         onMealChange = {},
         onNoteChange = {},
         onAttendeesChange = {},
-        onCreatePerson = {},
+        onCreatePerson = { _, _ -> },
         onSaveVisit = {},
         modifier = Modifier.padding(16.dp),
       )

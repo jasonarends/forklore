@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,51 +24,47 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
+import com.jasonarends.forklore.ui.theme.ForkloreType
 
 /**
- * Picks people from [people]: household members by default, with a way to reveal outside
- * recommenders who'd otherwise clutter "who was there". Shared by every screen that cites a person
- * — visit attendees, a person-scoped want, an opinion's author — so it supports both single and
- * multi select rather than each caller reimplementing selection.
+ * Picks people from [people]. Everyone is always shown — household members first, then everyone
+ * else in a quieter group under an "Others" label — so a person added from one picker is never
+ * hidden from another. Shared by every screen that cites a person — visit attendees, a
+ * person-scoped want, a recommender, an opinion's author — so it supports both single and multi
+ * select rather than each caller reimplementing selection.
  *
  * [selected] and [onSelectionChange] are hoisted, per CLAUDE.md: Room is the source of truth for
- * who exists, and the caller (a ViewModel) owns what's selected. Which of [people] is currently
- * *visible* is not persisted anywhere and is not part of the screen it's picking for, so it stays
- * local composable state, the same way a "show password" toggle would.
+ * who exists, and the caller (a ViewModel) owns what's selected.
  *
  * Creating a new person is the one write this component causes, and even that goes through the
- * caller: [onCreatePerson] is required to call `PersonRepository.findOrCreate` — which returns the
- * existing id on a dedupe, not always a fresh one — and then add that id to [selected] itself
- * (replacing the current selection for single select). Without that second step a freshly created
- * person who isn't a household member matches neither the household filter nor [selected] and
- * silently disappears behind "Show everyone"; this component has no way to select it for you, since
- * it only learns the new person exists once [people] re-emits from the caller's `Flow`.
- *
- * [showEveryoneByDefault] starts with outside people visible, for callers whose whole point is to
- * name one — a recommender is usually someone who will never be a household member.
+ * caller: [onCreatePerson] receives the trimmed name and whether the user ticked "Household". It is
+ * required to call `PersonRepository.findOrCreate` — which returns the existing id on a dedupe, not
+ * always a fresh one — and then add that id to [selected] itself (replacing the current selection
+ * for single select), since this component only learns the new person exists once [people] re-emits
+ * from the caller's `Flow`. Household membership is the user's explicit choice here, never inferred
+ * from which picker was used; it defaults to off because the people typed into a picker are mostly
+ * one-off recommenders, and the household is small and set up on the People screen.
  */
 @Composable
 fun PersonPicker(
   people: List<PersonEntity>,
   selected: Set<String>,
   onSelectionChange: (Set<String>) -> Unit,
-  onCreatePerson: (String) -> Unit,
+  onCreatePerson: (name: String, isHouseholdMember: Boolean) -> Unit,
   modifier: Modifier = Modifier,
   multiSelect: Boolean = true,
-  showEveryoneByDefault: Boolean = false,
 ) {
-  var showAll by remember { mutableStateOf(showEveryoneByDefault) }
   var newName by remember { mutableStateOf("") }
+  var newIsHousehold by remember { mutableStateOf(false) }
+  val colors = ForkloreTheme.colors
 
-  // A person already selected stays visible even when hidden by the household filter: a
-  // recommender picked while "everyone" was showing must not silently vanish from view when the
-  // list collapses back to household-only, which would look like their selection was lost.
-  val visible = if (showAll) people else people.filter { it.isHouseholdMember || it.id in selected }
-  val hiddenCount = people.size - visible.size
+  val household = people.filter { it.isHouseholdMember }
+  val others = people.filterNot { it.isHouseholdMember }
 
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  @Composable
+  fun Chips(group: List<PersonEntity>, quiet: Boolean) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      visible.forEach { person ->
+      group.forEach { person ->
         val isSelected = person.id in selected
         LedgerChip(
           label = person.name,
@@ -83,13 +81,17 @@ fun PersonPicker(
           },
           modifier = Modifier.testTag("person-picker-chip-${person.id}"),
           role = if (multiSelect) Role.Checkbox else Role.RadioButton,
+          quiet = quiet,
         )
       }
     }
-    if (!showAll && hiddenCount > 0) {
-      TextButton(onClick = { showAll = true }) { Text("Show everyone ($hiddenCount more)") }
-    } else if (showAll && people.any { !it.isHouseholdMember }) {
-      TextButton(onClick = { showAll = false }) { Text("Household only") }
+  }
+
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (household.isNotEmpty()) Chips(household, quiet = false)
+    if (others.isNotEmpty()) {
+      UppercaseLabel(text = "Others", style = ForkloreType.fieldLabel, color = colors.ink2)
+      Chips(others, quiet = true)
     }
     Row(
       verticalAlignment = Alignment.CenterVertically,
@@ -107,13 +109,28 @@ fun PersonPicker(
         onClick = {
           val trimmed = newName.trim()
           if (trimmed.isNotEmpty()) {
-            onCreatePerson(trimmed)
+            onCreatePerson(trimmed, newIsHousehold)
             newName = ""
+            newIsHousehold = false
           }
         },
       ) {
         Text("Add")
       }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Checkbox(
+        modifier = Modifier.testTag("person-picker-new-household"),
+        checked = newIsHousehold,
+        onCheckedChange = { newIsHousehold = it },
+        colors =
+          CheckboxDefaults.colors(
+            checkedColor = colors.ink,
+            checkmarkColor = colors.card,
+            uncheckedColor = colors.ink2,
+          ),
+      )
+      Text("Household member", style = ForkloreType.topBarSubtitle, color = colors.ink2)
     }
   }
 }
@@ -144,7 +161,7 @@ private fun PersonPickerPreview() {
           ),
         selected = selected,
         onSelectionChange = { selected = it },
-        onCreatePerson = {},
+        onCreatePerson = { _, _ -> },
         modifier = Modifier.padding(16.dp),
       )
     }

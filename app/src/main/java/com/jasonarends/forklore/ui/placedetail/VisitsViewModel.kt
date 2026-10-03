@@ -88,10 +88,10 @@ class VisitsViewModel(
    * to infer once [uiState] eventually replays the newly created person. Same crash/stuck-draft
    * risk as [save] on a write failure, so the same catch.
    */
-  fun onCreatePerson(name: String) {
+  fun onCreatePerson(name: String, isHouseholdMember: Boolean) {
     viewModelScope.launch {
       try {
-        val id = personRepository.findOrCreate(name)
+        val id = personRepository.findOrCreate(name, isHouseholdMember)
         updateDraft { it.copy(attendees = it.attendees + id) }
       } catch (_: SQLiteException) {
         _draft.update { it?.copy(error = "Couldn't add that person. Try again.") }

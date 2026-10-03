@@ -131,7 +131,7 @@ class DishOpinionsSectionTest {
           onTemperatureChange = onTemperatureChange,
           onNoteChange = onNoteChange,
           onVisitChange = onVisitChange,
-          onCreatePerson = {},
+          onCreatePerson = { _, _ -> },
           onSave = onSave,
           onDelete = onDelete,
         )

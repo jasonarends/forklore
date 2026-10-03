@@ -108,10 +108,10 @@ class DishOpinionsViewModel(
   fun onVisitChange(visitId: String?) = updateDraft { it.copy(visitId = visitId, error = null) }
 
   /** Same shape as [VisitsViewModel.onCreatePerson]: the new person becomes the draft's author. */
-  fun onCreatePerson(name: String) {
+  fun onCreatePerson(name: String, isHouseholdMember: Boolean) {
     viewModelScope.launch {
       try {
-        val id = personRepository.findOrCreate(name)
+        val id = personRepository.findOrCreate(name, isHouseholdMember)
         updateDraft { it.copy(authorId = id, error = null) }
       } catch (_: SQLiteException) {
         _draft.update { it?.copy(error = "Couldn't add that person. Try again.") }
