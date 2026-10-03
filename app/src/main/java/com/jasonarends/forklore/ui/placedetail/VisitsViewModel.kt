@@ -45,7 +45,7 @@ class VisitsViewModel(
   private val visitRepository: VisitRepository,
   private val personRepository: PersonRepository,
   private val placeEntryId: String,
-  private val clock: Clock = Clock.System,
+  private val clock: Clock,
   private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) : ViewModel() {
 

@@ -1,6 +1,7 @@
 package com.jasonarends.forklore.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
@@ -41,8 +42,12 @@ internal fun LedgerChip(
   val fill = if (selected) colors.rule else Color.Transparent
   val base =
     modifier.minimumInteractiveComponentSize().let {
-      if (onClick != null) it.selectable(selected = selected, onClick = onClick, role = role)
-      else it
+      when {
+        onClick == null -> it
+        // An action chip (Today, Yesterday) has no selected state for TalkBack to announce.
+        role == Role.Button -> it.clickable(onClick = onClick, role = role)
+        else -> it.selectable(selected = selected, onClick = onClick, role = role)
+      }
     }
   Surface(
     modifier = base,

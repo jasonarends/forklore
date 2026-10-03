@@ -32,6 +32,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
+private val today: LocalDate = LocalDate.of(2026, 10, 3)
+
 /**
  * Drives [VisitsSection] the way [PlaceDetailScreen] really does: [draftState] is created once,
  * outside composition (see [setVisitsSectionContent]'s KDoc), and mutated only through the same
@@ -42,8 +44,6 @@ import org.robolectric.RobolectricTestRunner
  * nothing, so every test that reaches them needs `.performScrollTo()` first, same as
  * [com.jasonarends.forklore.ui.addplace.AddPlaceFormTest].
  */
-private val today: LocalDate = LocalDate.of(2026, 10, 3)
-
 @RunWith(RobolectricTestRunner::class)
 class VisitsSectionTest {
   @get:Rule val compose = createComposeRule()
@@ -228,7 +228,8 @@ class VisitsSectionTest {
               draftState.value = draftState.value?.copy(precision = it, error = null)
             },
             onQuickDate = {
-              draftState.value = draftState.value?.withDay(today.minusDays(it.daysAgo))
+              draftState.value =
+                draftState.value?.withDay(today.minusDays(it.daysAgo))?.copy(error = null)
             },
             onYearChange = { draftState.value = draftState.value?.copy(year = it) },
             onMonthChange = { draftState.value = draftState.value?.copy(month = it) },
