@@ -12,9 +12,12 @@ import com.jasonarends.forklore.data.db.DatePrecision
 import com.jasonarends.forklore.data.db.Meal
 import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.db.VisitWithAttendees
+import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.data.repository.VisitRepository
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,11 +36,17 @@ import kotlinx.coroutines.launch
  * sitting in the path of a field someone is actively typing into risks a stale value winning a
  * recomposition race. [uiState]'s own `combine` is safe: nothing in it is a text field someone
  * types into directly.
+ *
+ * "Today" is [clock] read in [zone]. [zone] is a supplier, not a value, so a device whose time zone
+ * changes while this ViewModel is alive (travel) still gets the local date at the moment the editor
+ * opens.
  */
 class VisitsViewModel(
   private val visitRepository: VisitRepository,
   private val personRepository: PersonRepository,
   private val placeEntryId: String,
+  private val clock: Clock = Clock.System,
+  private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) : ViewModel() {
 
   val uiState: StateFlow<VisitsUiState> =
@@ -53,8 +62,18 @@ class VisitsViewModel(
   val draft: StateFlow<VisitDraft?> = _draft.asStateFlow()
 
   fun startAdd() {
-    _draft.value = VisitDraft()
+    _draft.value = VisitDraft().withDay(today())
   }
+
+  /**
+   * Replaces whatever date the draft holds with the day [quickDate] names, at [DatePrecision.DAY].
+   */
+  fun onQuickDate(quickDate: QuickDate) = updateDraft {
+    it.withDay(today().minusDays(quickDate.daysAgo)).copy(error = null)
+  }
+
+  private fun today(): LocalDate =
+    Instant.ofEpochMilli(clock.nowMillis()).atZone(zone()).toLocalDate()
 
   fun startEdit(visit: VisitWithAttendees) {
     _draft.value = VisitDraft.from(visit)
@@ -152,10 +171,21 @@ class VisitsViewModel(
     fun factory(placeEntryId: String): ViewModelProvider.Factory = viewModelFactory {
       initializer {
         val app = this[APPLICATION_KEY] as ForkloreApp
-        VisitsViewModel(app.container.visitRepository, app.container.personRepository, placeEntryId)
+        VisitsViewModel(
+          app.container.visitRepository,
+          app.container.personRepository,
+          placeEntryId,
+          app.container.clock,
+        )
       }
     }
   }
+}
+
+/** The date chips offered beside the precision picker; see [VisitsViewModel.onQuickDate]. */
+enum class QuickDate(val label: String, val daysAgo: Long) {
+  TODAY("Today", 0),
+  YESTERDAY("Yesterday", 1),
 }
 
 sealed interface VisitsUiState {
@@ -201,6 +231,14 @@ data class VisitDraft(
         runCatching { LocalDate.of(year.toInt(), month.toInt(), 1).toEpochDay() }
       DatePrecision.YEAR -> runCatching { LocalDate.of(year.toInt(), 1, 1).toEpochDay() }
     }
+
+  fun withDay(date: LocalDate): VisitDraft =
+    copy(
+      precision = DatePrecision.DAY,
+      year = date.year.toString(),
+      month = date.monthValue.toString(),
+      day = date.dayOfMonth.toString(),
+    )
 
   companion object {
     fun from(visit: VisitWithAttendees): VisitDraft {

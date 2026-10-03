@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * stamping, soft deletes and name normalization; a ViewModel holding a DAO would quietly skip all
  * three.
  */
-class AppContainer(context: Context, private val clock: Clock = Clock.System) {
+class AppContainer(context: Context, val clock: Clock = Clock.System) {
   private val database: ForkloreDatabase by lazy { ForkloreDatabase.build(context) }
 
   /**
