@@ -41,6 +41,9 @@ import com.jasonarends.forklore.ui.theme.ForkloreTheme
  * person who isn't a household member matches neither the household filter nor [selected] and
  * silently disappears behind "Show everyone"; this component has no way to select it for you, since
  * it only learns the new person exists once [people] re-emits from the caller's `Flow`.
+ *
+ * [showEveryoneByDefault] starts with outside people visible, for callers whose whole point is to
+ * name one — a recommender is usually someone who will never be a household member.
  */
 @Composable
 fun PersonPicker(
@@ -50,8 +53,9 @@ fun PersonPicker(
   onCreatePerson: (String) -> Unit,
   modifier: Modifier = Modifier,
   multiSelect: Boolean = true,
+  showEveryoneByDefault: Boolean = false,
 ) {
-  var showAll by remember { mutableStateOf(false) }
+  var showAll by remember { mutableStateOf(showEveryoneByDefault) }
   var newName by remember { mutableStateOf("") }
 
   // A person already selected stays visible even when hidden by the household filter: a

@@ -11,6 +11,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.jasonarends.forklore.ui.addplace.AddPlaceScreen
+import com.jasonarends.forklore.ui.dishinterests.DishInterestListScreen
 import com.jasonarends.forklore.ui.people.PeopleScreen
 import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
 import com.jasonarends.forklore.ui.placelist.PlaceListScreen
@@ -39,6 +40,7 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
             onAddPlace = { backStack.add(AddPlace) },
             onPlaceClick = { entryId -> backStack.add(PlaceDetail(entryId)) },
             onPeopleClick = { backStack.add(People) },
+            onDishInterestsClick = { backStack.add(DishInterestList) },
             // Every screen now owns its own Scaffold + LedgerTopBar, which needs to render
             // edge-to-edge (paper background, full-width rule) rather than inset by a blanket
             // margin — LedgerTopBar handles the status-bar inset itself.
@@ -56,6 +58,13 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
           PlaceDetailScreen(
             placeEntryId = key.placeEntryId,
             onBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.fillMaxSize(),
+          )
+        }
+        entry<DishInterestList> {
+          DishInterestListScreen(
+            onBack = { backStack.removeLastOrNull() },
+            onPlaceClick = { entryId -> backStack.add(PlaceDetail(entryId)) },
             modifier = Modifier.fillMaxSize(),
           )
         }
