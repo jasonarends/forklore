@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,7 +89,7 @@ private fun VisitRow(visit: VisitWithAttendees, onEdit: () -> Unit, modifier: Mo
     modifier =
       modifier
         .fillMaxWidth()
-        .clickable(role = Role.Button, onClick = onEdit)
+        .clickable(onClickLabel = "Edit visit", role = Role.Button, onClick = onEdit)
         .testTag("visit-row-${visit.visit.id}")
   ) {
     Row(
@@ -104,15 +103,12 @@ private fun VisitRow(visit: VisitWithAttendees, onEdit: () -> Unit, modifier: Mo
         modifier = Modifier.weight(1f),
       )
       Text(
+        // A cue only: the whole row is the tap target, so a second clickable here would be a
+        // nested duplicate for TalkBack.
         text = "Edit",
         style =
           MaterialTheme.typography.labelMedium.copy(textDecoration = TextDecoration.Underline),
         color = colors.ink,
-        modifier =
-          Modifier.minimumInteractiveComponentSize()
-            .testTag("visit-edit-${visit.visit.id}")
-            .clickable(onClick = onEdit)
-            .padding(4.dp),
       )
     }
     if (visit.attendees.isNotEmpty()) {

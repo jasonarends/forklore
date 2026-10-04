@@ -64,18 +64,6 @@ class VisitsSectionTest {
   }
 
   @Test
-  fun theEditLink_asksToEditThatVisit() {
-    var edited: String? = null
-    compose.setContent {
-      ForkloreTheme { VisitsSection(listOf(visit), onAddVisit = {}, onEditVisit = { edited = it }) }
-    }
-
-    compose.onNodeWithTag("visit-edit-visit-1").performClick()
-
-    assertEquals("visit-1", edited)
-  }
-
-  @Test
   fun addAVisit_asksToAdd_andNoFormOpensInline() {
     var added = 0
     compose.setContent {

@@ -1,5 +1,6 @@
 package com.jasonarends.forklore.ui.visiteditor
 
+import android.database.sqlite.SQLiteException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.jasonarends.forklore.data.db.DatePrecision
@@ -9,12 +10,16 @@ import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.db.PlaceEntity
 import com.jasonarends.forklore.data.db.PlaceEntryEntity
 import com.jasonarends.forklore.data.db.PlaceListEntity
+import com.jasonarends.forklore.data.db.VisitDao
+import com.jasonarends.forklore.data.db.VisitWithAttendees
 import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.data.repository.VisitRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
 import java.time.ZoneId
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -136,7 +141,6 @@ class VisitEditorViewModelTest {
   @Test
   fun anAddOpensWithADraftDatedToday() = runTest {
     val draft = viewModel.draft.value!!
-    assertNull(draft.visitId)
     assertEquals(DatePrecision.DAY, draft.precision)
     assertEquals(OCT_3_2026, draft.resolveDate().getOrThrow())
     assertEquals("", draft.note)
@@ -287,7 +291,6 @@ class VisitEditorViewModelTest {
 
     val draft = newViewModel(entryId, visitId).draft.value!!
 
-    assertEquals(visitId, draft.visitId)
     assertEquals(DatePrecision.DAY, draft.precision)
     assertEquals("2026", draft.year)
     assertEquals("6", draft.month)
@@ -456,6 +459,31 @@ class VisitEditorViewModelTest {
     )
     assertNull(editor.draft.value)
     assertFalse(editor.hasUnsavedChanges.value)
+  }
+
+  @Test
+  fun aFailedLoad_isAnError_notNotFound() = runTest {
+    val visitId = recordVisit()
+    val failingDao =
+      object : VisitDao by db.visitDao() {
+        override fun observeForPlaceEntry(placeEntryId: String): Flow<List<VisitWithAttendees>> =
+          flow {
+            throw SQLiteException("disk I/O error")
+          }
+      }
+    val editor =
+      VisitEditorViewModel(
+        VisitRepository(db, failingDao, Clock { 0L }),
+        personRepository,
+        entryId,
+        visitId,
+        Clock { PINNED_NOW },
+      )
+
+    val state = editor.uiState.first { it !is VisitEditorUiState.Loading }
+
+    assertTrue(state is VisitEditorUiState.Error)
+    assertNull(editor.draft.value)
   }
 
   @Test

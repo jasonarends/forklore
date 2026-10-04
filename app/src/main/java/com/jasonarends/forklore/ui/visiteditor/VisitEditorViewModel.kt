@@ -58,15 +58,18 @@ class VisitEditorViewModel(
     LOADING,
     READY,
     NOT_FOUND,
+    FAILED,
   }
 
   private val load = MutableStateFlow(Load.LOADING)
+  private var loadFailure: Throwable? = null
 
   val uiState: StateFlow<VisitEditorUiState> =
     combine(personRepository.observeAll(), load) { people, load ->
         when (load) {
           Load.LOADING -> VisitEditorUiState.Loading
           Load.NOT_FOUND -> VisitEditorUiState.NotFound
+          Load.FAILED -> VisitEditorUiState.Error(loadFailure ?: IllegalStateException())
           Load.READY -> VisitEditorUiState.Ready(people)
         }
       }
@@ -87,12 +90,13 @@ class VisitEditorViewModel(
 
   /**
    * Whether the form differs from what it opened with. [VisitDraft.saving] and [VisitDraft.error]
-   * are transient UI state, not something the person changed, so they never count. Opening an add
-   * already carries today's date, so an untouched add is not dirty.
+   * are transient UI state, not something the person changed, so they never count. A draft mid-save
+   * is never dirty: the write may still land, so offering to discard it would be a lie. Opening an
+   * add already carries today's date, so an untouched add is not dirty.
    */
   val hasUnsavedChanges: StateFlow<Boolean> =
     combine(_draft, _saved) { draft, saved ->
-        !saved && draft != null && draft.comparable() != initial
+        !saved && draft != null && !draft.saving && draft.comparable() != initial
       }
       .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -101,15 +105,16 @@ class VisitEditorViewModel(
       open(VisitDraft().withDay(today()))
     } else {
       viewModelScope.launch {
-        val visit =
-          try {
+        try {
+          val visit =
             visitRepository.observeForPlaceEntry(placeEntryId).first().firstOrNull {
               it.visit.id == visitId
             }
-          } catch (_: SQLiteException) {
-            null
-          }
-        if (visit == null) load.value = Load.NOT_FOUND else open(VisitDraft.from(visit))
+          if (visit == null) load.value = Load.NOT_FOUND else open(VisitDraft.from(visit))
+        } catch (e: SQLiteException) {
+          loadFailure = e
+          load.value = Load.FAILED
+        }
       }
     }
   }
@@ -186,7 +191,6 @@ class VisitEditorViewModel(
     _draft.update { it?.copy(saving = true, error = null) }
     viewModelScope.launch {
       try {
-        val visitId = current.visitId
         if (visitId == null) {
           visitRepository.record(
             placeEntryId = placeEntryId,
@@ -243,7 +247,7 @@ sealed interface VisitEditorUiState {
   data class Ready(val people: List<PersonEntity>) : VisitEditorUiState
 }
 
-/** The date chips offered beside the precision picker; see [VisitsViewModel.onQuickDate]. */
+/** The date chips offered beside the precision picker; see [VisitEditorViewModel.onQuickDate]. */
 enum class QuickDate(val label: String, val daysAgo: Long) {
   TODAY("Today", 0),
   YESTERDAY("Yesterday", 1),
@@ -253,10 +257,9 @@ enum class QuickDate(val label: String, val daysAgo: Long) {
  * The add/edit form's own state. [year], [month] and [day] stay plain strings rather than `Int?`: a
  * text field passes through "not yet a valid number" and "not yet typed" on every keystroke, and
  * forcing either into `Int?` this early would either reject a still-being-typed "2" or invent a
- * default nobody chose. [visitId] is null for a new visit and set for an edit in progress.
+ * default nobody chose.
  */
 data class VisitDraft(
-  val visitId: String? = null,
   val precision: DatePrecision = DatePrecision.UNKNOWN,
   val year: String = "",
   val month: String = "",
@@ -297,7 +300,6 @@ data class VisitDraft(
       val entity = visit.visit
       val date = entity.dateEpochDay?.let(LocalDate::ofEpochDay)
       return VisitDraft(
-        visitId = entity.id,
         precision = entity.datePrecision,
         year = date?.year?.toString() ?: "",
         month = date?.monthValue?.toString() ?: "",

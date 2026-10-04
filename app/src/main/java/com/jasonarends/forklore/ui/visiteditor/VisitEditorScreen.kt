@@ -76,9 +76,13 @@ fun VisitEditorScreen(
     if (saved) onDone()
   }
 
-  val requestExit = { if (dirty) confirmingDiscard = true else onDone() }
-  // Disabled when clean so the back gesture falls through to NavDisplay's own pop.
-  BackHandler(enabled = dirty) { confirmingDiscard = true }
+  val saving = draft?.saving == true
+  // Mid-save the write may still land, so leaving would neither discard nor save reliably:
+  // back, Cancel and the top bar do nothing until it resolves (success pops via `saved`).
+  val requestExit = { if (saving) Unit else if (dirty) confirmingDiscard = true else onDone() }
+  // Disabled when clean so the back gesture falls through to NavDisplay's own pop. Enabled while
+  // saving purely to consume the event.
+  BackHandler(enabled = dirty || saving) { if (!saving) confirmingDiscard = true }
 
   Scaffold(
     modifier = modifier,

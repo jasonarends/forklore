@@ -43,7 +43,7 @@ class VisitEditorFormTest {
 
   @Test
   fun addingADayPreciseVisit_savesTheExactDate() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     var saved: VisitDraft? = null
     compose.setVisitEditorContent(draftState, onSaveVisit = { saved = draftState.value })
 
@@ -63,7 +63,7 @@ class VisitEditorFormTest {
 
   @Test
   fun newVisit_showsTodaysDateFilledIn() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     compose.setVisitEditorContent(draftState)
 
     compose.onNodeWithTag("visit-date-month").assert(hasText("10"))
@@ -73,33 +73,33 @@ class VisitEditorFormTest {
 
   @Test
   fun tappingYesterday_setsYesterdaysDate() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     compose.setVisitEditorContent(draftState)
 
     compose.onNodeWithTag("visit-date-yesterday").performClick()
 
     val draft = draftState.value
-    assertEquals(DatePrecision.DAY, draft?.precision)
-    assertEquals("2026", draft?.year)
-    assertEquals("10", draft?.month)
-    assertEquals("2", draft?.day)
+    assertEquals(DatePrecision.DAY, draft.precision)
+    assertEquals("2026", draft.year)
+    assertEquals("10", draft.month)
+    assertEquals("2", draft.day)
     compose.onNodeWithTag("visit-date-day").assert(hasText("2"))
   }
 
   @Test
   fun tappingToday_afterYesterday_restoresTodaysDate() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     compose.setVisitEditorContent(draftState)
 
     compose.onNodeWithTag("visit-date-yesterday").performClick()
     compose.onNodeWithTag("visit-date-today").performClick()
 
-    assertEquals("3", draftState.value?.day)
+    assertEquals("3", draftState.value.day)
   }
 
   @Test
   fun addingAMonthOnlyVisit_leavesTheDayFieldOffScreen() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     var saved: VisitDraft? = null
     compose.setVisitEditorContent(draftState, onSaveVisit = { saved = draftState.value })
 
@@ -116,7 +116,7 @@ class VisitEditorFormTest {
 
   @Test
   fun addingAVisitWithNoDate_needsNoDateFieldsAtAll() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     var saved: VisitDraft? = null
     compose.setVisitEditorContent(draftState, onSaveVisit = { saved = draftState.value })
 
@@ -145,17 +145,17 @@ class VisitEditorFormTest {
         createdAt = 0,
         updatedAt = 0,
       )
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     compose.setVisitEditorContent(draftState, people = listOf(dale))
 
     compose.onNodeWithTag("person-picker-chip-${dale.id}").performScrollTo().performClick()
 
-    assertEquals(setOf(dale.id), draftState.value?.attendees)
+    assertEquals(setOf(dale.id), draftState.value.attendees)
   }
 
   @Test
   fun cancellingTheForm_reportsCancelWithoutSaving() {
-    val draftState = mutableStateOf<VisitDraft?>(VisitDraft().withDay(today))
+    val draftState = mutableStateOf<VisitDraft>(VisitDraft().withDay(today))
     var saveCount = 0
     var cancelCount = 0
     compose.setVisitEditorContent(
@@ -178,30 +178,30 @@ class VisitEditorFormTest {
    * bug this shape avoids.
    */
   private fun ComposeContentTestRule.setVisitEditorContent(
-    draftState: MutableState<VisitDraft?>,
+    draftState: MutableState<VisitDraft>,
     people: List<PersonEntity> = emptyList(),
     onCreatePerson: (String, Boolean) -> Unit = { _, _ -> },
     onSaveVisit: () -> Unit = {},
-    onCancel: () -> Unit = { draftState.value = null },
+    onCancel: () -> Unit = {},
   ) {
     setContent {
       ForkloreTheme {
         VisitEditorForm(
-          draft = draftState.value ?: VisitDraft(),
+          draft = draftState.value,
           people = people,
           onPrecisionChange = {
-            draftState.value = draftState.value?.copy(precision = it, error = null)
+            draftState.value = draftState.value.copy(precision = it, error = null)
           },
           onQuickDate = {
             draftState.value =
-              draftState.value?.withDay(today.minusDays(it.daysAgo))?.copy(error = null)
+              draftState.value.withDay(today.minusDays(it.daysAgo)).copy(error = null)
           },
-          onYearChange = { draftState.value = draftState.value?.copy(year = it) },
-          onMonthChange = { draftState.value = draftState.value?.copy(month = it) },
-          onDayChange = { draftState.value = draftState.value?.copy(day = it) },
-          onMealChange = { draftState.value = draftState.value?.copy(meal = it) },
-          onNoteChange = { draftState.value = draftState.value?.copy(note = it) },
-          onAttendeesChange = { draftState.value = draftState.value?.copy(attendees = it) },
+          onYearChange = { draftState.value = draftState.value.copy(year = it) },
+          onMonthChange = { draftState.value = draftState.value.copy(month = it) },
+          onDayChange = { draftState.value = draftState.value.copy(day = it) },
+          onMealChange = { draftState.value = draftState.value.copy(meal = it) },
+          onNoteChange = { draftState.value = draftState.value.copy(note = it) },
+          onAttendeesChange = { draftState.value = draftState.value.copy(attendees = it) },
           onCreatePerson = onCreatePerson,
           onSave = onSaveVisit,
           onCancel = onCancel,

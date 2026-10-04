@@ -1,7 +1,9 @@
 package com.jasonarends.forklore
 
 import android.os.Looper
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -201,8 +203,35 @@ class MainNavigationTest {
 
     waitForText("Edit visit")
     composeTestRule.onNodeWithTag("visit-note").assertExists()
-    composeTestRule.onNodeWithText("Loud but good").assertExists()
+    composeTestRule
+      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("visit-note")))
+      .assertTextContains("Loud but good")
     composeTestRule.runOnIdle { assertEquals(VisitEditor(entry, visit), backStack.last()) }
+  }
+
+  @Test
+  fun leavingTheEditorTwiceDuringItsExitAnimation_neverPopsPlaceDetailToo() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("New visit")
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag("visit-cancel").fetchSemanticsNodes().isNotEmpty()
+    }
+
+    // Two taps landing before the popped editor has left composition (its exit animation): fire the
+    // same click action twice in one frame, the way a double-tap can.
+    val cancel = composeTestRule.onNodeWithTag("visit-cancel").performScrollTo()
+    composeTestRule.runOnUiThread {
+      val click = cancel.fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
+      click()
+      click()
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.runOnIdle {
+      assertEquals(listOf<NavKey>(Main, PlaceDetail(entry)), backStack.toList())
+    }
   }
 
   @Test
@@ -335,8 +364,8 @@ class MainNavigationTest {
     val entry = seedEntry()
     val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry))
     composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
-    composeTestRule.onNodeWithTag("dish-query-field").assertDoesNotExist()
     waitForText("No dishes yet.")
+    composeTestRule.onNodeWithTag("dish-query-field").assertDoesNotExist()
 
     composeTestRule.onNodeWithTag("dish-add-button").performScrollTo().performClick()
     composeTestRule.onNodeWithTag("dish-query-field").performTextInput("Burnt Ends")

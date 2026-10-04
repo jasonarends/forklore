@@ -61,8 +61,16 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
           PlaceDetailScreen(
             placeEntryId = key.placeEntryId,
             onBack = { backStack.removeLastOrNull() },
-            onAddVisit = { backStack.add(VisitEditor(key.placeEntryId)) },
-            onEditVisit = { visitId -> backStack.add(VisitEditor(key.placeEntryId, visitId)) },
+            // Only while this is still the top: a second tap during the exit animation of a
+            // just-pushed editor must not stack another one.
+            onAddVisit = {
+              if (backStack.lastOrNull() == key) backStack.add(VisitEditor(key.placeEntryId))
+            },
+            onEditVisit = { visitId ->
+              if (backStack.lastOrNull() == key) {
+                backStack.add(VisitEditor(key.placeEntryId, visitId))
+              }
+            },
             modifier = Modifier.fillMaxSize(),
           )
         }
@@ -70,7 +78,9 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
           VisitEditorScreen(
             placeEntryId = key.placeEntryId,
             visitId = key.visitId,
-            onDone = { backStack.removeLastOrNull() },
+            // Guarded: Save/Cancel/Discard can fire again while this entry animates out, and a
+            // blind pop would then take PlaceDetail with it.
+            onDone = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
             modifier = Modifier.fillMaxSize(),
           )
         }
