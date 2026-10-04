@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.jasonarends.forklore.data.db.DishAliasEntity
 import com.jasonarends.forklore.data.db.DishEntity
@@ -145,10 +146,10 @@ class PlaceDetailScreenTest {
   }
 
   /**
-   * Unlike the other tests here, this renders a real (non-empty) `dishesSection` — the "Add a dish"
-   * field is also a text input, so this is what actually proves the place-note testTag matcher
-   * above does real work rather than passing only because the tree happens to have one text field
-   * in it.
+   * Unlike the other tests here, this renders a real (non-empty) `dishesSection` and opens its
+   * alias field — a second text input — so this is what actually proves the place-note testTag
+   * matcher above does real work rather than passing only because the tree happens to have one text
+   * field in it.
    */
   @Test
   fun editingTheNote_stillWorks_whenARealDishesSectionAddsAnotherTextField() {
@@ -167,10 +168,7 @@ class PlaceDetailScreenTest {
           dishesSection = {
             DishesSection(
               state = DishesUiState.Success(listOf(dish("Barrel Potatoes"))),
-              query = "",
-              suggestions = emptyList(),
-              onQueryChange = {},
-              onAddDish = {},
+              onStartAddDish = {},
               onAddAlias = { _, _ -> },
               dishInterests = {},
               opinionsContent = {},
@@ -180,6 +178,8 @@ class PlaceDetailScreenTest {
       }
     }
 
+    compose.onNodeWithText("+ Alternate spelling").performScrollTo().performClick()
+    compose.onNodeWithTag("alias-field").assertExists()
     compose
       .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("place-note")))
       .performTextInput("Great pasta")
@@ -292,10 +292,7 @@ class PlaceDetailScreenTest {
             DishesUiState.Success(
               listOf(dish("Barrel Potatoes", aliases = listOf("potatoe barrels")))
             ),
-          query = "",
-          suggestions = emptyList(),
-          onQueryChange = {},
-          onAddDish = {},
+          onStartAddDish = {},
           onAddAlias = { _, _ -> },
           dishInterests = {},
           opinionsContent = {},
@@ -308,16 +305,13 @@ class PlaceDetailScreenTest {
   }
 
   @Test
-  fun typingADishName_andPressingAdd_submitsIt() {
-    var added: String? = null
+  fun addADish_asksToOpenTheSheet_andNoEntryFieldIsInline() {
+    var started = 0
     compose.setContent {
       ForkloreTheme {
         DishesSection(
           state = DishesUiState.Success(emptyList()),
-          query = "Burnt Ends",
-          suggestions = emptyList(),
-          onQueryChange = {},
-          onAddDish = { added = it },
+          onStartAddDish = { started++ },
           onAddAlias = { _, _ -> },
           dishInterests = {},
           opinionsContent = {},
@@ -325,38 +319,10 @@ class PlaceDetailScreenTest {
       }
     }
 
-    compose.onNodeWithText("Add").performClick()
+    compose.onNodeWithTag("dish-query-field").assertDoesNotExist()
+    compose.onNodeWithTag("dish-add-button").performClick()
 
-    assertEquals("Burnt Ends", added)
-  }
-
-  /**
-   * Issue #6's "done when": typing a spelling already taught to an existing dish (via an alias)
-   * offers that dish as a suggestion, and picking it submits the same name a fresh lookup would
-   * resolve back to the existing row — never a hand-typed duplicate.
-   */
-  @Test
-  fun typingAKnownAlias_offersTheExistingDishAsASuggestion_thatSubmitsIt() {
-    var added: String? = null
-    val existing = dish("Barrel Potatoes", aliases = listOf("barrel tots"))
-    compose.setContent {
-      ForkloreTheme {
-        DishesSection(
-          state = DishesUiState.Success(listOf(existing)),
-          query = "barrel tots",
-          suggestions = listOf(existing),
-          onQueryChange = {},
-          onAddDish = { added = it },
-          onAddAlias = { _, _ -> },
-          dishInterests = {},
-          opinionsContent = {},
-        )
-      }
-    }
-
-    compose.onNodeWithTag("dish-suggestion-${existing.dish.id}").performClick()
-
-    assertEquals("Barrel Potatoes", added)
+    assertEquals(1, started)
   }
 
   @Test
@@ -365,10 +331,7 @@ class PlaceDetailScreenTest {
       ForkloreTheme {
         DishesSection(
           state = DishesUiState.Error(RuntimeException("disk full")),
-          query = "",
-          suggestions = emptyList(),
-          onQueryChange = {},
-          onAddDish = {},
+          onStartAddDish = {},
           onAddAlias = { _, _ -> },
           dishInterests = {},
           opinionsContent = {},

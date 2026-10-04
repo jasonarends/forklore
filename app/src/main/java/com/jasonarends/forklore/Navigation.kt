@@ -15,6 +15,7 @@ import com.jasonarends.forklore.ui.dishinterests.DishInterestListScreen
 import com.jasonarends.forklore.ui.people.PeopleScreen
 import com.jasonarends.forklore.ui.placedetail.PlaceDetailScreen
 import com.jasonarends.forklore.ui.placelist.PlaceListScreen
+import com.jasonarends.forklore.ui.visiteditor.VisitEditorScreen
 
 /**
  * [backStack] defaults to a fresh one for real use; tests hoist their own so they can push and pop
@@ -27,7 +28,9 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
     onBack = { backStack.removeLastOrNull() },
     // Without these, every entry's `viewModel(factory = ...)` resolves against one shared
     // ViewModelStore keyed only by class: opening a second PlaceEntry reuses the first one's
-    // PlaceDetailViewModel, and AddPlace visited twice gets back its already-saved ViewModel.
+    // PlaceDetailViewModel, and AddPlace visited twice gets back its already-saved ViewModel. The
+    // same goes for VisitEditor: without a store per entry, editing visit B would get visit A's
+    // ViewModel back, draft and all.
     entryDecorators =
       listOf(
         rememberSaveableStateHolderNavEntryDecorator(),
@@ -58,6 +61,26 @@ fun MainNavigation(backStack: NavBackStack<NavKey> = rememberNavBackStack(Main))
           PlaceDetailScreen(
             placeEntryId = key.placeEntryId,
             onBack = { backStack.removeLastOrNull() },
+            // Only while this is still the top: a second tap during the exit animation of a
+            // just-pushed editor must not stack another one.
+            onAddVisit = {
+              if (backStack.lastOrNull() == key) backStack.add(VisitEditor(key.placeEntryId))
+            },
+            onEditVisit = { visitId ->
+              if (backStack.lastOrNull() == key) {
+                backStack.add(VisitEditor(key.placeEntryId, visitId))
+              }
+            },
+            modifier = Modifier.fillMaxSize(),
+          )
+        }
+        entry<VisitEditor> { key ->
+          VisitEditorScreen(
+            placeEntryId = key.placeEntryId,
+            visitId = key.visitId,
+            // Guarded: Save/Cancel/Discard can fire again while this entry animates out, and a
+            // blind pop would then take PlaceDetail with it.
+            onDone = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
             modifier = Modifier.fillMaxSize(),
           )
         }
