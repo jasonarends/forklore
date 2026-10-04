@@ -2,21 +2,31 @@ package com.jasonarends.forklore
 
 import android.os.Looper
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.espresso.Espresso
+import com.jasonarends.forklore.data.db.DatePrecision
 import com.jasonarends.forklore.data.db.DishStatus
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -139,6 +149,251 @@ class MainNavigationTest {
     waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithText("the receipts").fetchSemanticsNodes().isNotEmpty()
     }
+  }
+
+  @Test
+  fun addVisit_opensTheEditorOnItsOwn_withoutTheDishesList() {
+    val entry = seedEntry(dish = "Barrel Potatoes")
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("Barrel Potatoes")
+
+    composeTestRule.onNodeWithTag("visits-add-button").performScrollTo().performClick()
+
+    waitForText("New visit")
+    // The motivating bug: the dishes sat directly under the visit form and read as its menu.
+    composeTestRule.onNodeWithText("Barrel Potatoes").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("dish-add-button").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("visit-save").assertExists()
+  }
+
+  @Test
+  fun savingAVisit_returnsToPlaceDetail_whereItIsListed() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("No visits yet.")
+    composeTestRule.onNodeWithTag("visits-add-button").performScrollTo().performClick()
+    waitForText("New visit")
+
+    typeVisitNote("Verano")
+    composeTestRule.onNodeWithTag("visit-save").performScrollTo().performClick()
+
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("New visit").fetchSemanticsNodes().isEmpty()
+    }
+    waitForText("Verano")
+    composeTestRule.onNodeWithText("No visits yet.").assertDoesNotExist()
+    composeTestRule.runOnIdle {
+      assertEquals(listOf<NavKey>(Main, PlaceDetail(entry)), backStack.toList())
+    }
+  }
+
+  @Test
+  fun tappingAVisit_opensItForEdit_withItsData() {
+    val entry = seedEntry()
+    val visit = seedVisit(entry, note = "Loud but good")
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("Loud but good")
+
+    composeTestRule.onNodeWithTag("visit-row-$visit").performScrollTo().performClick()
+
+    waitForText("Edit visit")
+    composeTestRule.onNodeWithTag("visit-note").assertExists()
+    composeTestRule.onNodeWithText("Loud but good").assertExists()
+    composeTestRule.runOnIdle { assertEquals(VisitEditor(entry, visit), backStack.last()) }
+  }
+
+  @Test
+  fun backWithNoChanges_justPops() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("New visit")
+
+    pressBack()
+
+    composeTestRule.runOnIdle { assertEquals(PlaceDetail(entry), backStack.last()) }
+    composeTestRule.onNodeWithText("Discard changes?").assertDoesNotExist()
+  }
+
+  @Test
+  fun backWithUnsavedChanges_asksFirst_andKeepEditingKeepsTheDraft() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("New visit")
+    typeVisitNote("Verano")
+
+    pressBack()
+
+    composeTestRule.onNodeWithText("Discard changes?").assertExists()
+    composeTestRule.runOnIdle { assertEquals(VisitEditor(entry), backStack.last()) }
+
+    composeTestRule.onNodeWithTag("visit-keep-editing").performClick()
+
+    composeTestRule.onNodeWithText("Discard changes?").assertDoesNotExist()
+    composeTestRule.runOnIdle { assertEquals(VisitEditor(entry), backStack.last()) }
+    composeTestRule.onNodeWithText("Verano").assertExists()
+  }
+
+  @Test
+  fun backWithUnsavedChanges_thenDiscard_popsWithoutSaving() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("New visit")
+    typeVisitNote("Verano")
+
+    pressBack()
+    composeTestRule.onNodeWithTag("visit-discard").performClick()
+
+    composeTestRule.runOnIdle { assertEquals(PlaceDetail(entry), backStack.last()) }
+    waitForText("No visits yet.")
+    composeTestRule.onNodeWithText("Verano").assertDoesNotExist()
+  }
+
+  @Test
+  fun theTopBarBackAndCancel_askTheSameQuestion_whenThereAreUnsavedChanges() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("New visit")
+    typeVisitNote("Verano")
+
+    composeTestRule.onNodeWithContentDescription("Back").performClick()
+    composeTestRule.onNodeWithText("Discard changes?").assertExists()
+    composeTestRule.onNodeWithTag("visit-keep-editing").performClick()
+
+    composeTestRule.onNodeWithTag("visit-cancel").performScrollTo().performClick()
+    composeTestRule.onNodeWithText("Discard changes?").assertExists()
+    composeTestRule.runOnIdle { assertEquals(VisitEditor(entry), backStack.last()) }
+  }
+
+  @Test
+  fun editingOneVisitAfterAbandoningAnother_neverShowsTheFirstsDraft() {
+    val entry = seedEntry()
+    val a = seedVisit(entry, note = "Note A")
+    val b = seedVisit(entry, note = "Note B")
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry, a))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("Note A")
+    typeVisitNote("Note A edited", replace = true)
+    composeTestRule.onNodeWithText("Note A edited").assertExists()
+
+    composeTestRule.runOnIdle {
+      backStack.removeLastOrNull()
+      backStack.add(VisitEditor(entry, b))
+    }
+
+    waitForText("Note B")
+    composeTestRule.onNodeWithText("Note A edited").assertDoesNotExist()
+    composeTestRule.onNodeWithText("Note A").assertDoesNotExist()
+  }
+
+  @Test
+  fun anAddAfterAnAbandonedEdit_opensFresh_notWithTheEditsDraft() {
+    val entry = seedEntry()
+    val a = seedVisit(entry, note = "Note A")
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry, a))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("Note A")
+    typeVisitNote("Note A edited", replace = true)
+
+    composeTestRule.runOnIdle {
+      backStack.removeLastOrNull()
+      backStack.add(VisitEditor(entry))
+    }
+
+    waitForText("New visit")
+    composeTestRule.onNodeWithText("Note A edited").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("visit-save").assertExists()
+  }
+
+  @Test
+  fun anEditorOnTopOfAnotherEditor_keepsEachEntrysOwnDraft() {
+    val entryA = seedEntry()
+    val entryB = seedEntry(name = "Cafe Mirabel")
+    val visitA = seedVisit(entryA, note = "Note A")
+    val visitB = seedVisit(entryB, note = "Note B")
+    val backStack = NavBackStack<NavKey>(Main, VisitEditor(entryA, visitA))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitForText("Note A")
+    typeVisitNote("Note A edited", replace = true)
+
+    composeTestRule.runOnIdle { backStack.add(VisitEditor(entryB, visitB)) }
+    waitForText("Note B")
+    composeTestRule.onNodeWithText("Note A edited").assertDoesNotExist()
+
+    composeTestRule.runOnIdle { backStack.removeLastOrNull() }
+    waitForText("Note A edited")
+  }
+
+  @Test
+  fun addingADish_opensASheet_andAddingClosesItAndListsTheDish() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    composeTestRule.onNodeWithTag("dish-query-field").assertDoesNotExist()
+    waitForText("No dishes yet.")
+
+    composeTestRule.onNodeWithTag("dish-add-button").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("dish-query-field").performTextInput("Burnt Ends")
+    composeTestRule.onNodeWithTag("dish-submit").performClick()
+
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("Burnt Ends").fetchSemanticsNodes().isNotEmpty() &&
+        composeTestRule.onAllNodesWithTag("dish-query-field").fetchSemanticsNodes().isEmpty()
+    }
+    composeTestRule.onNodeWithText("Burnt Ends").assertExists()
+  }
+
+  private fun seedEntry(name: String = "Halberd", dish: String? = null): String = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<ForkloreApp>()
+    val places = app.container.placeRepository
+    val listId = app.container.placeListRepository.create("Test list")
+    val entry = places.addToList(listId, places.addPlace(name))
+    if (dish != null) app.container.dishRepository.findOrCreateDish(entry, dish)
+    entry
+  }
+
+  private fun seedVisit(entry: String, note: String): String = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<ForkloreApp>()
+    app.container.visitRepository.record(
+      placeEntryId = entry,
+      dateEpochDay = 20_625,
+      datePrecision = DatePrecision.DAY,
+      note = note,
+    )
+  }
+
+  private fun typeVisitNote(text: String, replace: Boolean = false) {
+    val note = hasSetTextAction() and hasAnyAncestor(hasTestTag("visit-note"))
+    // The title shows before the draft has loaded; the note field only exists once it has.
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodes(note).fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNode(note).performScrollTo()
+    // Typing into a prefilled field lands at the cursor, which starts at the front.
+    if (replace) composeTestRule.onNode(note).performTextReplacement(text)
+    else composeTestRule.onNode(note).performTextInput(text)
+    // The keystroke reaches the ViewModel, whose StateFlow replies on the (paused) main looper.
+    shadowOf(Looper.getMainLooper()).idle()
+    composeTestRule.waitForIdle()
+  }
+
+  private fun waitForText(text: String) {
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    }
+  }
+
+  private fun pressBack() {
+    shadowOf(Looper.getMainLooper()).idle()
+    Espresso.pressBack()
+    shadowOf(Looper.getMainLooper()).idle()
+    composeTestRule.waitForIdle()
   }
 
   private fun addAPlace(name: String) {

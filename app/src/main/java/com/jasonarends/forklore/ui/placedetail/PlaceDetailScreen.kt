@@ -3,7 +3,6 @@ package com.jasonarends.forklore.ui.placedetail
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,10 +21,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,10 +39,9 @@ import com.jasonarends.forklore.data.db.Rating
 import com.jasonarends.forklore.data.db.RevisitIntent
 import com.jasonarends.forklore.ui.components.DogPolicyPicker
 import com.jasonarends.forklore.ui.components.EmptyState
-import com.jasonarends.forklore.ui.components.LedgerChip
+import com.jasonarends.forklore.ui.components.LedgerGhostButton
 import com.jasonarends.forklore.ui.components.LedgerGlyph
 import com.jasonarends.forklore.ui.components.LedgerIcon
-import com.jasonarends.forklore.ui.components.LedgerPrimaryButton
 import com.jasonarends.forklore.ui.components.LedgerTextField
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.components.NoteField
@@ -62,6 +58,8 @@ import com.jasonarends.forklore.ui.theme.dashedBorder
 fun PlaceDetailScreen(
   placeEntryId: String,
   onBack: () -> Unit,
+  onAddVisit: () -> Unit,
+  onEditVisit: (visitId: String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: PlaceDetailViewModel = viewModel(factory = PlaceDetailViewModel.factory(placeEntryId)),
   dishesViewModel: DishesViewModel = viewModel(factory = DishesViewModel.factory(placeEntryId)),
@@ -78,6 +76,7 @@ fun PlaceDetailScreen(
   // the title below and the `when` in Scaffold's content match on this same captured `current`
   // instead of re-reading `state` a second time and risking the two disagreeing.
   val current = state
+  var addingDish by rememberSaveable { mutableStateOf(false) }
   // The top bar repeats the same name/branch the body heading shows (see PlaceDetail below), so
   // it needs the name before the rest of the screen is ready to render.
   val title =
@@ -103,7 +102,6 @@ fun PlaceDetailScreen(
         val dishQuery by dishesViewModel.query.collectAsStateWithLifecycle()
         val dishSuggestions by dishesViewModel.suggestions.collectAsStateWithLifecycle()
         val visitsState by visitsViewModel.uiState.collectAsStateWithLifecycle()
-        val visitDraft by visitsViewModel.draft.collectAsStateWithLifecycle()
         val interestsState by interestsViewModel.uiState.collectAsStateWithLifecycle()
         val interestDraft by interestsViewModel.draft.collectAsStateWithLifecycle()
         val opinionsState by opinionsViewModel.uiState.collectAsStateWithLifecycle()
@@ -127,31 +125,15 @@ fun PlaceDetailScreen(
               is VisitsUiState.Success ->
                 VisitsSection(
                   visits = visitsCurrent.visits,
-                  people = visitsCurrent.people,
-                  draft = visitDraft,
-                  onStartAdd = visitsViewModel::startAdd,
-                  onStartEdit = visitsViewModel::startEdit,
-                  onCancelDraft = visitsViewModel::cancelDraft,
-                  onPrecisionChange = visitsViewModel::onPrecisionChange,
-                  onQuickDate = visitsViewModel::onQuickDate,
-                  onYearChange = visitsViewModel::onYearChange,
-                  onMonthChange = visitsViewModel::onMonthChange,
-                  onDayChange = visitsViewModel::onDayChange,
-                  onMealChange = visitsViewModel::onMealChange,
-                  onNoteChange = visitsViewModel::onNoteChange,
-                  onAttendeesChange = visitsViewModel::onAttendeesChange,
-                  onCreatePerson = visitsViewModel::onCreatePerson,
-                  onSaveVisit = visitsViewModel::save,
+                  onAddVisit = onAddVisit,
+                  onEditVisit = onEditVisit,
                 )
             }
           },
           dishesSection = {
             DishesSection(
               state = dishesState,
-              query = dishQuery,
-              suggestions = dishSuggestions,
-              onQueryChange = dishesViewModel::onQueryChange,
-              onAddDish = dishesViewModel::addDish,
+              onStartAddDish = { addingDish = true },
               onAddAlias = dishesViewModel::addAlias,
               dishInterests = { dishId ->
                 when (val interests = interestsState) {
@@ -207,6 +189,21 @@ fun PlaceDetailScreen(
           },
           modifier = Modifier.padding(innerPadding),
         )
+        if (addingDish) {
+          AddDishSheet(
+            query = dishQuery,
+            suggestions = dishSuggestions,
+            onQueryChange = dishesViewModel::onQueryChange,
+            onSubmit = {
+              dishesViewModel.addDish(it)
+              addingDish = false
+            },
+            onDismiss = {
+              dishesViewModel.onQueryChange("")
+              addingDish = false
+            },
+          )
+        }
       }
     }
   }
@@ -324,10 +321,7 @@ internal fun PlaceDetail(
 @Composable
 internal fun DishesSection(
   state: DishesUiState,
-  query: String,
-  suggestions: List<DishWithAliases>,
-  onQueryChange: (String) -> Unit,
-  onAddDish: (String) -> Unit,
+  onStartAddDish: () -> Unit,
   onAddAlias: (dishId: String, alias: String) -> Unit,
   dishInterests: @Composable (dishId: String) -> Unit,
   opinionsContent: @Composable (dishId: String) -> Unit,
@@ -361,14 +355,11 @@ internal fun DishesSection(
         }
         // Only rendered in the Success branch: on Error the write would still land (it hits the
         // database directly, not this composable's state), but the list never recovers to show
-        // it, so the user would submit into a field and see nothing happen. Loading has no
-        // suggestions to offer yet either way.
-        DishEntryField(
-          query = query,
-          suggestions = suggestions,
-          onQueryChange = onQueryChange,
-          onSubmit = onAddDish,
-          modifier = Modifier.padding(top = 8.dp),
+        // it, so the user would submit into a field and see nothing happen.
+        LedgerGhostButton(
+          text = "Add a dish",
+          onClick = onStartAddDish,
+          modifier = Modifier.padding(top = 8.dp).testTag("dish-add-button"),
         )
       }
     }
@@ -434,57 +425,6 @@ private fun AliasEntry(onAdd: (String) -> Unit, modifier: Modifier = Modifier) {
   } else {
     TextButton(onClick = { expanded = true }, modifier = modifier) {
       Text("+ Alternate spelling", color = colors.ink2)
-    }
-  }
-}
-
-/**
- * The "add a dish" field: typing offers matching [suggestions] as chips (see
- * [DishesViewModel.suggestions]) so a dish already recorded under a different spelling is picked
- * rather than re-typed into a duplicate; tapping one submits it exactly as [onSubmit] would. The
- * button submits whatever was typed regardless — `DishRepository.findOrCreateDish` is what actually
- * guards against a duplicate landing in Room; this field only makes the existing option visible.
- */
-@Composable
-private fun DishEntryField(
-  query: String,
-  suggestions: List<DishWithAliases>,
-  onQueryChange: (String) -> Unit,
-  onSubmit: (String) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Column(modifier = modifier.fillMaxWidth()) {
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      LedgerTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        label = "Add a dish",
-        capitalization = KeyboardCapitalization.Words,
-        modifier = Modifier.weight(1f).testTag("dish-query-field"),
-      )
-      LedgerPrimaryButton(
-        text = "Add",
-        onClick = { onSubmit(query) },
-        enabled = query.isNotBlank(),
-      )
-    }
-    if (suggestions.isNotEmpty()) {
-      FlowRow(
-        modifier = Modifier.padding(top = 6.dp).testTag("dish-suggestions"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        suggestions.forEach { suggestion ->
-          LedgerChip(
-            label = suggestion.dish.canonicalName,
-            selected = false,
-            onClick = { onSubmit(suggestion.dish.canonicalName) },
-            modifier = Modifier.testTag("dish-suggestion-${suggestion.dish.id}"),
-          )
-        }
-      }
     }
   }
 }
@@ -578,10 +518,7 @@ private fun PlaceDetailPopulatedPreview() {
                   )
                 )
               ),
-            query = "",
-            suggestions = emptyList(),
-            onQueryChange = {},
-            onAddDish = {},
+            onStartAddDish = {},
             onAddAlias = { _, _ -> },
             dishInterests = {},
             opinionsContent = {},
@@ -620,10 +557,7 @@ private fun PlaceDetailEmptyPreview() {
         dishesSection = {
           DishesSection(
             state = DishesUiState.Success(emptyList()),
-            query = "",
-            suggestions = emptyList(),
-            onQueryChange = {},
-            onAddDish = {},
+            onStartAddDish = {},
             onAddAlias = { _, _ -> },
             dishInterests = {},
             opinionsContent = {},
