@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -25,6 +26,7 @@ import com.jasonarends.forklore.data.db.VisitEntity
 import com.jasonarends.forklore.data.db.VisitWithAttendees
 import com.jasonarends.forklore.ui.components.DatePrecisionPicker
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.LedgerChip
 import com.jasonarends.forklore.ui.components.LedgerGhostButton
 import com.jasonarends.forklore.ui.components.LedgerPrimaryButton
 import com.jasonarends.forklore.ui.components.LedgerTextField
@@ -55,6 +57,7 @@ internal fun VisitsSection(
   onStartEdit: (VisitWithAttendees) -> Unit,
   onCancelDraft: () -> Unit,
   onPrecisionChange: (DatePrecision) -> Unit,
+  onQuickDate: (QuickDate) -> Unit,
   onYearChange: (String) -> Unit,
   onMonthChange: (String) -> Unit,
   onDayChange: (String) -> Unit,
@@ -87,6 +90,7 @@ internal fun VisitsSection(
         draft = draft,
         people = people,
         onPrecisionChange = onPrecisionChange,
+        onQuickDate = onQuickDate,
         onYearChange = onYearChange,
         onMonthChange = onMonthChange,
         onDayChange = onDayChange,
@@ -164,6 +168,7 @@ private fun VisitForm(
   draft: VisitDraft,
   people: List<PersonEntity>,
   onPrecisionChange: (DatePrecision) -> Unit,
+  onQuickDate: (QuickDate) -> Unit,
   onYearChange: (String) -> Unit,
   onMonthChange: (String) -> Unit,
   onDayChange: (String) -> Unit,
@@ -178,6 +183,17 @@ private fun VisitForm(
   val colors = ForkloreTheme.colors
   Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     UppercaseLabel(text = "Date", style = ForkloreType.fieldLabel, color = colors.ink2)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      QuickDate.entries.forEach { quickDate ->
+        LedgerChip(
+          label = quickDate.label,
+          selected = false,
+          onClick = { onQuickDate(quickDate) },
+          role = Role.Button,
+          modifier = Modifier.testTag("visit-date-${quickDate.name.lowercase()}"),
+        )
+      }
+    }
     DatePrecisionPicker(
       precision = draft.precision,
       onPrecisionChange = onPrecisionChange,
@@ -283,6 +299,7 @@ private fun VisitsSectionPreview() {
         onStartEdit = {},
         onCancelDraft = {},
         onPrecisionChange = {},
+        onQuickDate = {},
         onYearChange = {},
         onMonthChange = {},
         onDayChange = {},

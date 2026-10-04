@@ -6,9 +6,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -16,17 +18,21 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import com.jasonarends.forklore.data.db.DatePrecision
 import com.jasonarends.forklore.data.db.Meal
 import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.data.db.VisitEntity
 import com.jasonarends.forklore.data.db.VisitWithAttendees
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+
+private val today: LocalDate = LocalDate.of(2026, 10, 3)
 
 /**
  * Drives [VisitsSection] the way [PlaceDetailScreen] really does: [draftState] is created once,
@@ -50,9 +56,9 @@ class VisitsSectionTest {
 
     compose.onNodeWithTag("visits-add-button").performClick()
     compose.onNodeWithText("Exact date").performClick()
-    compose.onNodeWithTag("visit-date-month").performTextInput("6")
-    compose.onNodeWithTag("visit-date-day").performTextInput("21")
-    compose.onNodeWithTag("visit-date-year").performTextInput("2026")
+    compose.onNodeWithTag("visit-date-month").performTextReplacement("6")
+    compose.onNodeWithTag("visit-date-day").performTextReplacement("21")
+    compose.onNodeWithTag("visit-date-year").performTextReplacement("2026")
     compose.onNodeWithText("Dinner").performScrollTo().performClick()
     compose.onNodeWithTag("visit-save").performScrollTo().performClick()
 
@@ -64,6 +70,46 @@ class VisitsSectionTest {
   }
 
   @Test
+  fun newVisit_showsTodaysDateFilledIn() {
+    val draftState = mutableStateOf<VisitDraft?>(null)
+    compose.setVisitsSectionContent(draftState)
+
+    compose.onNodeWithTag("visits-add-button").performClick()
+
+    compose.onNodeWithTag("visit-date-month").assert(hasText("10"))
+    compose.onNodeWithTag("visit-date-day").assert(hasText("3"))
+    compose.onNodeWithTag("visit-date-year").assert(hasText("2026"))
+  }
+
+  @Test
+  fun tappingYesterday_setsYesterdaysDate() {
+    val draftState = mutableStateOf<VisitDraft?>(null)
+    compose.setVisitsSectionContent(draftState)
+
+    compose.onNodeWithTag("visits-add-button").performClick()
+    compose.onNodeWithTag("visit-date-yesterday").performClick()
+
+    val draft = draftState.value
+    assertEquals(DatePrecision.DAY, draft?.precision)
+    assertEquals("2026", draft?.year)
+    assertEquals("10", draft?.month)
+    assertEquals("2", draft?.day)
+    compose.onNodeWithTag("visit-date-day").assert(hasText("2"))
+  }
+
+  @Test
+  fun tappingToday_afterYesterday_restoresTodaysDate() {
+    val draftState = mutableStateOf<VisitDraft?>(null)
+    compose.setVisitsSectionContent(draftState)
+
+    compose.onNodeWithTag("visits-add-button").performClick()
+    compose.onNodeWithTag("visit-date-yesterday").performClick()
+    compose.onNodeWithTag("visit-date-today").performClick()
+
+    assertEquals("3", draftState.value?.day)
+  }
+
+  @Test
   fun addingAMonthOnlyVisit_leavesTheDayFieldOffScreen() {
     val draftState = mutableStateOf<VisitDraft?>(null)
     var saved: VisitDraft? = null
@@ -71,8 +117,8 @@ class VisitsSectionTest {
 
     compose.onNodeWithTag("visits-add-button").performClick()
     compose.onNodeWithText("Month only").performClick()
-    compose.onNodeWithTag("visit-date-month").performTextInput("6")
-    compose.onNodeWithTag("visit-date-year").performTextInput("2026")
+    compose.onNodeWithTag("visit-date-month").performTextReplacement("6")
+    compose.onNodeWithTag("visit-date-year").performTextReplacement("2026")
     compose.onNodeWithTag("visit-date-day").assertDoesNotExist()
     compose.onNodeWithTag("visit-save").performScrollTo().performClick()
 
@@ -88,8 +134,9 @@ class VisitsSectionTest {
     compose.setVisitsSectionContent(draftState, onSaveVisit = { saved = draftState.value })
 
     compose.onNodeWithTag("visits-add-button").performClick()
-    // "No date" is the default selection, so this covers a visit entered with no date touch at
-    // all, matching issue #5's "Verano — no date at all" source note.
+    // Matches issue #5's "Verano — no date at all" source note: the date defaults to today
+    // (issue #32), and "No date" is still one tap away.
+    compose.onNodeWithText("No date").performClick()
     compose.onNodeWithTag("visit-date-month").assertDoesNotExist()
     compose.onNodeWithTag("visit-date-year").assertDoesNotExist()
     compose
@@ -174,11 +221,15 @@ class VisitsSectionTest {
             visits = visits,
             people = people,
             draft = draftState.value,
-            onStartAdd = { draftState.value = VisitDraft() },
+            onStartAdd = { draftState.value = VisitDraft().withDay(today) },
             onStartEdit = onStartEdit,
             onCancelDraft = { draftState.value = null },
             onPrecisionChange = {
               draftState.value = draftState.value?.copy(precision = it, error = null)
+            },
+            onQuickDate = {
+              draftState.value =
+                draftState.value?.withDay(today.minusDays(it.daysAgo))?.copy(error = null)
             },
             onYearChange = { draftState.value = draftState.value?.copy(year = it) },
             onMonthChange = { draftState.value = draftState.value?.copy(month = it) },

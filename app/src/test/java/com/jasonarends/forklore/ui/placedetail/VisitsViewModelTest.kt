@@ -13,6 +13,7 @@ import com.jasonarends.forklore.data.repository.Clock
 import com.jasonarends.forklore.data.repository.PersonRepository
 import com.jasonarends.forklore.data.repository.VisitRepository
 import com.jasonarends.forklore.testing.MainDispatcherRule
+import java.time.ZoneId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -26,6 +27,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+
+// 02:00 UTC on 3 Oct 2026: still the evening of the 2nd in Los Angeles (UTC-7).
+private const val PINNED_NOW = 1_790_992_800_000L
+private const val OCT_3_2026 = 20_729L
+private const val OCT_2_2026 = 20_728L
 
 /**
  * Runs against a real in-memory Room database, per
@@ -85,20 +91,85 @@ class VisitsViewModelTest {
     // Built here, not in a field initializer: stateIn launches on viewModelScope
     // (Dispatchers.Main) as soon as the ViewModel exists, so it must not run before
     // MainDispatcherRule replaces Dispatchers.Main, which happens after field initializers.
-    viewModel = VisitsViewModel(visitRepository, personRepository, entryId)
+    viewModel = newViewModel(entryId)
   }
 
   @After fun tearDown() = db.close()
 
+  private fun newViewModel(entry: String, zone: ZoneId = ZoneId.of("UTC")) =
+    VisitsViewModel(visitRepository, personRepository, entry, Clock { PINNED_NOW }, { zone })
+
   @Test
-  fun startAdd_opensABlankDraft() = runTest {
+  fun startAdd_opensADraftDatedToday() = runTest {
     viewModel.startAdd()
 
     val draft = viewModel.draft.value!!
     assertNull(draft.visitId)
-    assertEquals(DatePrecision.UNKNOWN, draft.precision)
+    assertEquals(DatePrecision.DAY, draft.precision)
+    assertEquals(OCT_3_2026, draft.resolveDate().getOrThrow())
     assertEquals("", draft.note)
     assertTrue(draft.attendees.isEmpty())
+  }
+
+  @Test
+  fun startAdd_honoursTheTimeZoneWhenPickingToday() = runTest {
+    val la = newViewModel(entryId, ZoneId.of("America/Los_Angeles"))
+
+    la.startAdd()
+
+    val draft = la.draft.value!!
+    assertEquals(DatePrecision.DAY, draft.precision)
+    assertEquals("2", draft.day)
+    assertEquals(OCT_2_2026, draft.resolveDate().getOrThrow())
+  }
+
+  @Test
+  fun savingANewVisitWithoutTouchingTheDate_storesTodayAtDayPrecision() = runTest {
+    viewModel.startAdd()
+
+    viewModel.save()
+
+    val stored = db.visitDao().observeForPlaceEntry(entryId).first().single().visit
+    assertEquals(DatePrecision.DAY, stored.datePrecision)
+    assertEquals(OCT_3_2026, stored.dateEpochDay)
+  }
+
+  @Test
+  fun quickDate_yesterday_setsTheDayBeforeToday() = runTest {
+    viewModel.startAdd()
+    viewModel.onPrecisionChange(DatePrecision.UNKNOWN)
+
+    viewModel.onQuickDate(QuickDate.YESTERDAY)
+
+    val draft = viewModel.draft.value!!
+    assertEquals(DatePrecision.DAY, draft.precision)
+    assertEquals(OCT_2_2026, draft.resolveDate().getOrThrow())
+  }
+
+  @Test
+  fun quickDate_today_replacesAnEarlierPick() = runTest {
+    viewModel.startAdd()
+    viewModel.onQuickDate(QuickDate.YESTERDAY)
+
+    viewModel.onQuickDate(QuickDate.TODAY)
+
+    assertEquals(OCT_3_2026, viewModel.draft.value!!.resolveDate().getOrThrow())
+  }
+
+  @Test
+  fun quickDate_onAnEditedVisit_isSavedAsTheNewDate() = runTest {
+    visitRepository.record(
+      placeEntryId = entryId,
+      dateEpochDay = 20_000,
+      datePrecision = DatePrecision.DAY,
+    )
+    viewModel.startEdit(db.visitDao().observeForPlaceEntry(entryId).first().single())
+
+    viewModel.onQuickDate(QuickDate.YESTERDAY)
+    viewModel.save()
+
+    val stored = db.visitDao().observeForPlaceEntry(entryId).first().single().visit
+    assertEquals(OCT_2_2026, stored.dateEpochDay)
   }
 
   @Test
@@ -149,6 +220,7 @@ class VisitsViewModelTest {
   @Test
   fun savingWithNoDate_storesNoEpochDay() = runTest {
     viewModel.startAdd()
+    viewModel.onPrecisionChange(DatePrecision.UNKNOWN)
     viewModel.onNoteChange("Verano")
 
     viewModel.save()
@@ -181,7 +253,7 @@ class VisitsViewModelTest {
     viewModel.onPrecisionChange(DatePrecision.DAY)
     viewModel.onYearChange("2026")
     viewModel.onMonthChange("6")
-    // day left blank
+    viewModel.onDayChange("") // the default fills today's day; blank it
 
     viewModel.save()
 
@@ -194,7 +266,7 @@ class VisitsViewModelTest {
     // AcceptanceSpecTest and VisitRepositoryTest already exercise — a real, deterministic write
     // failure with no mocking framework involved. Its own ViewModel, not the shared `viewModel`
     // field, since that one is wired to a real entryId.
-    val brokenViewModel = VisitsViewModel(visitRepository, personRepository, "no-such-entry")
+    val brokenViewModel = newViewModel("no-such-entry")
     brokenViewModel.startAdd()
 
     brokenViewModel.save()
@@ -229,6 +301,41 @@ class VisitsViewModelTest {
     assertEquals(Meal.DINNER, draft.meal)
     assertEquals("Loud but good", draft.note)
     assertEquals(setOf(ana), draft.attendees)
+  }
+
+  @Test
+  fun startEdit_keepsAnExistingVisitsDateRatherThanDefaultingToToday() = runTest {
+    visitRepository.record(
+      placeEntryId = entryId,
+      dateEpochDay = 20_625,
+      datePrecision = DatePrecision.DAY,
+    )
+
+    viewModel.startEdit(db.visitDao().observeForPlaceEntry(entryId).first().single())
+    viewModel.save()
+
+    val stored = db.visitDao().observeForPlaceEntry(entryId).first().single().visit
+    assertEquals(DatePrecision.DAY, stored.datePrecision)
+    assertEquals(20_625L, stored.dateEpochDay)
+  }
+
+  @Test
+  fun editingAnUndatedVisit_leavesItUndated() = runTest {
+    visitRepository.record(
+      placeEntryId = entryId,
+      dateEpochDay = null,
+      datePrecision = DatePrecision.UNKNOWN,
+      note = "Verano",
+    )
+    viewModel.startEdit(db.visitDao().observeForPlaceEntry(entryId).first().single())
+    assertEquals(DatePrecision.UNKNOWN, viewModel.draft.value!!.precision)
+
+    viewModel.onNoteChange("Verano, again")
+    viewModel.save()
+
+    val stored = db.visitDao().observeForPlaceEntry(entryId).first().single().visit
+    assertEquals(DatePrecision.UNKNOWN, stored.datePrecision)
+    assertNull(stored.dateEpochDay)
   }
 
   @Test

@@ -133,6 +133,7 @@ fun PlaceDetailScreen(
                   onStartEdit = visitsViewModel::startEdit,
                   onCancelDraft = visitsViewModel::cancelDraft,
                   onPrecisionChange = visitsViewModel::onPrecisionChange,
+                  onQuickDate = visitsViewModel::onQuickDate,
                   onYearChange = visitsViewModel::onYearChange,
                   onMonthChange = visitsViewModel::onMonthChange,
                   onDayChange = visitsViewModel::onDayChange,
