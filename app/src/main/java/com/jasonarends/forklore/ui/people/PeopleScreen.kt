@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jasonarends.forklore.data.db.PersonEntity
 import com.jasonarends.forklore.ui.components.EmptyState
+import com.jasonarends.forklore.ui.components.HouseholdCheckbox
 import com.jasonarends.forklore.ui.components.LedgerPrimaryButton
 import com.jasonarends.forklore.ui.components.LedgerTopBar
 import com.jasonarends.forklore.ui.theme.ForkloreTheme
@@ -213,7 +212,6 @@ private fun AddPersonRow(onAddPerson: (String, Boolean) -> Unit, modifier: Modif
   // way.
   var name by rememberSaveable { mutableStateOf("") }
   var isHouseholdMember by rememberSaveable { mutableStateOf(true) }
-  val colors = ForkloreTheme.colors
 
   Column(modifier = modifier.fillMaxWidth()) {
     Row(
@@ -239,19 +237,10 @@ private fun AddPersonRow(onAddPerson: (String, Boolean) -> Unit, modifier: Modif
         },
       )
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Checkbox(
-        modifier = Modifier.testTag("people-add-household"),
-        checked = isHouseholdMember,
-        onCheckedChange = { isHouseholdMember = it },
-        colors =
-          CheckboxDefaults.colors(
-            checkedColor = colors.ink,
-            checkmarkColor = colors.card,
-            uncheckedColor = colors.ink2,
-          ),
-      )
-      Text("Household member", style = ForkloreType.topBarSubtitle, color = colors.ink2)
-    }
+    HouseholdCheckbox(
+      checked = isHouseholdMember,
+      onCheckedChange = { isHouseholdMember = it },
+      modifier = Modifier.testTag("people-add-household"),
+    )
   }
 }

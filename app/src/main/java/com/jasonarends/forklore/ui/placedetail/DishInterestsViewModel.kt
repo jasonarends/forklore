@@ -89,14 +89,16 @@ class DishInterestsViewModel(
    * that component's KDoc the created (or already existing) id is selected here, since the picker
    * only learns the person exists once [uiState] re-emits.
    */
-  fun onCreateForPerson(name: String) = createPerson(name) { id -> onForPersonChange(id) }
+  fun onCreateForPerson(name: String, isHouseholdMember: Boolean) =
+    createPerson(name, isHouseholdMember) { id -> onForPersonChange(id) }
 
-  fun onCreateRecommender(name: String) = createPerson(name) { id -> onRecommendedByChange(id) }
+  fun onCreateRecommender(name: String, isHouseholdMember: Boolean) =
+    createPerson(name, isHouseholdMember) { id -> onRecommendedByChange(id) }
 
-  private fun createPerson(name: String, select: (String) -> Unit) {
+  private fun createPerson(name: String, isHouseholdMember: Boolean, select: (String) -> Unit) {
     viewModelScope.launch {
       try {
-        select(personRepository.findOrCreate(name))
+        select(personRepository.findOrCreate(name, isHouseholdMember))
       } catch (_: SQLiteException) {
         _draft.update { it?.copy(error = "Couldn't add that person. Try again.") }
       }

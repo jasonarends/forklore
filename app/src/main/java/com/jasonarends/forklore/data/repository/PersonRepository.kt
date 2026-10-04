@@ -31,6 +31,10 @@ class PersonRepository(private val personDao: PersonDao, private val clock: Cloc
     // tombstoned row's old values are exactly what a caller found stale enough to type over.
     suspend fun resolveExisting(): String? {
       val existing = personDao.byNormalizedNameIncludingDeleted(normalized) ?: return null
+      // Upgrade only: a ticked box promotes a live outsider, but an unticked one never demotes.
+      if (existing.deletedAt == null && isHouseholdMember && !existing.isHouseholdMember) {
+        personDao.update(existing.copy(isHouseholdMember = true, updatedAt = now))
+      }
       if (existing.deletedAt != null) {
         personDao.update(
           existing.copy(

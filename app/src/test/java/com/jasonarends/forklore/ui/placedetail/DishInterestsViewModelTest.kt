@@ -213,14 +213,36 @@ class DishInterestsViewModelTest {
       val viewModel = viewModel()
       viewModel.startAdd(dishId)
 
-      viewModel.onCreateRecommender("Marvin")
+      viewModel.onCreateRecommender("Marvin", false)
       advanceUntilIdle()
-      viewModel.onCreateForPerson("Robin")
+      viewModel.onCreateForPerson("Robin", true)
       advanceUntilIdle()
 
       val people = viewModel.success().people.associateBy { it.name }
       assertEquals(people.getValue("Marvin").id, viewModel.draft.value!!.recommendedById)
       assertEquals(people.getValue("Robin").id, viewModel.draft.value!!.forPersonId)
+    }
+
+  @Test
+  fun householdMembership_isTheUsersChoice_notWhichPickerCreatedThePerson() =
+    runTest(testDispatcher) {
+      val viewModel = viewModel()
+      viewModel.startAdd(dishId)
+
+      // The opposite of what each picker used to imply: a recommender who is household, a "for"
+      // person who isn't.
+      viewModel.onCreateRecommender("Marvin", true)
+      viewModel.onCreateForPerson("Robin", false)
+      advanceUntilIdle()
+
+      assertEquals(
+        true,
+        db.personDao().byNormalizedNameIncludingDeleted("marvin")!!.isHouseholdMember,
+      )
+      assertEquals(
+        false,
+        db.personDao().byNormalizedNameIncludingDeleted("robin")!!.isHouseholdMember,
+      )
     }
 
   @Test

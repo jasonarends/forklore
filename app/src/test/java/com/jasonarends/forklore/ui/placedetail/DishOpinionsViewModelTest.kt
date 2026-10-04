@@ -450,10 +450,29 @@ class DishOpinionsViewModelTest {
       val vm = observing()
       vm.startAdd(dishId)
 
-      vm.onCreatePerson("Dale")
+      vm.onCreatePerson("Dale", false)
 
       val dale = db.personDao().byNormalizedNameIncludingDeleted("dale")!!
       assertEquals(dale.id, vm.draft.value!!.authorId)
+    }
+
+  @Test
+  fun creatingAPersonInTheEditor_recordsTheUsersHouseholdChoice_readBackFromTheDatabase() =
+    runTest(testDispatcher) {
+      val vm = observing()
+      vm.startAdd(dishId)
+
+      vm.onCreatePerson("Dale", true)
+      vm.onCreatePerson("Marvin", false)
+
+      assertEquals(
+        true,
+        db.personDao().byNormalizedNameIncludingDeleted("dale")!!.isHouseholdMember,
+      )
+      assertEquals(
+        false,
+        db.personDao().byNormalizedNameIncludingDeleted("marvin")!!.isHouseholdMember,
+      )
     }
 
   // ---- buildDishOpinions: the rules, without a database -------------------------------

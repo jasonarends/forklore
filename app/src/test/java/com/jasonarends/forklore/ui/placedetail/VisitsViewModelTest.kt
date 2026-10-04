@@ -385,11 +385,23 @@ class VisitsViewModelTest {
   fun creatingAPerson_addsThemToTheDraftsAttendees() = runTest {
     viewModel.startAdd()
 
-    viewModel.onCreatePerson("Casey")
+    viewModel.onCreatePerson("Casey", false)
 
     val draft = viewModel.draft.value!!
     val casey = db.personDao().observeAll().first().single { it.name == "Casey" }
     assertEquals(setOf(casey.id), draft.attendees)
+  }
+
+  @Test
+  fun creatingAPerson_recordsTheUsersHouseholdChoice_readBackFromTheDatabase() = runTest {
+    viewModel.startAdd()
+
+    viewModel.onCreatePerson("Casey", true)
+    viewModel.onCreatePerson("Dale", false)
+
+    val stored = db.personDao().observeAll().first().associateBy { it.name }
+    assertTrue(stored.getValue("Casey").isHouseholdMember)
+    assertFalse(stored.getValue("Dale").isHouseholdMember)
   }
 
   @Test
