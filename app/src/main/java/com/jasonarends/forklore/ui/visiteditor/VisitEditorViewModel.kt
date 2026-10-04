@@ -90,13 +90,12 @@ class VisitEditorViewModel(
 
   /**
    * Whether the form differs from what it opened with. [VisitDraft.saving] and [VisitDraft.error]
-   * are transient UI state, not something the person changed, so they never count. A draft mid-save
-   * is never dirty: the write may still land, so offering to discard it would be a lie. Opening an
-   * add already carries today's date, so an untouched add is not dirty.
+   * are transient UI state, not something the person changed, so they never count. Opening an add
+   * already carries today's date, so an untouched add is not dirty.
    */
   val hasUnsavedChanges: StateFlow<Boolean> =
     combine(_draft, _saved) { draft, saved ->
-        !saved && draft != null && !draft.saving && draft.comparable() != initial
+        !saved && draft != null && draft.comparable() != initial
       }
       .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

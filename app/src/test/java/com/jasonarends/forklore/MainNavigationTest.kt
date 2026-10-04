@@ -235,6 +235,29 @@ class MainNavigationTest {
   }
 
   @Test
+  fun doubleTappingAddAVisit_opensOneEditor_notTwoStacked() {
+    val entry = seedEntry()
+    val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry))
+    composeTestRule.setContent { ForkloreTheme { MainNavigation(backStack = backStack) } }
+    waitUntilIdlingTheMainLooper(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag("visits-add-button").fetchSemanticsNodes().isNotEmpty()
+    }
+
+    // Same-frame double invoke, as above: the second tap lands before PlaceDetail leaves the top.
+    val add = composeTestRule.onNodeWithTag("visits-add-button").performScrollTo()
+    composeTestRule.runOnUiThread {
+      val click = add.fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
+      click()
+      click()
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.runOnIdle {
+      assertEquals(listOf(Main, PlaceDetail(entry), VisitEditor(entry)), backStack.toList())
+    }
+  }
+
+  @Test
   fun backWithNoChanges_justPops() {
     val entry = seedEntry()
     val backStack = NavBackStack<NavKey>(Main, PlaceDetail(entry), VisitEditor(entry))

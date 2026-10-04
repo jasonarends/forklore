@@ -1,10 +1,12 @@
 package com.jasonarends.forklore.ui.visiteditor
 
+import android.database.sqlite.SQLiteException
 import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -57,6 +59,59 @@ class VisitEditorScreenTest {
   @Test
   fun backDuringAnInFlightSave_doesNothing_thenPopsOnceTheSaveLands() {
     val gate = CompletableDeferred<Unit>()
+    val done = openEditorWithInsert { visit ->
+      gate.await()
+      db.visitDao().insert(visit)
+    }
+    typeNoteAndSave()
+
+    pressBackCancelAndTopBar()
+    compose.onNodeWithText("Discard changes?").assertDoesNotExist()
+    assertEquals(0, done())
+    compose.onNodeWithTag("visit-save").assertExists()
+
+    gate.complete(Unit)
+    compose.waitUntil(5_000) {
+      idle()
+      done() != 0
+    }
+    // One more pass so a second pop in a later frame would be counted, not missed.
+    idle()
+    assertEquals(1, done())
+  }
+
+  @Test
+  fun aSaveThatFails_handsControlBack_soBackAsksToDiscardAgain() {
+    val gate = CompletableDeferred<Unit>()
+    val done = openEditorWithInsert {
+      gate.await()
+      throw SQLiteException("disk full")
+    }
+    typeNoteAndSave()
+    pressBackCancelAndTopBar()
+    compose.onNodeWithText("Discard changes?").assertDoesNotExist()
+
+    gate.complete(Unit)
+    compose.waitUntil(5_000) {
+      idle()
+      compose
+        .onAllNodes(hasText("Couldn't save this visit. Try again."))
+        .fetchSemanticsNodes()
+        .isNotEmpty()
+    }
+    Espresso.pressBack()
+    idle()
+
+    compose.onNodeWithText("Discard changes?").assertExists()
+    assertEquals(0, done())
+  }
+
+  /**
+   * Opens a new-visit editor whose visit insert runs [insert], and returns a reader of how many
+   * times the screen was left. `onDone` and a stand-in for NavDisplay's own back handling share the
+   * count, so any leak past the screen shows up.
+   */
+  private fun openEditorWithInsert(insert: suspend (VisitEntity) -> Unit): () -> Int {
     runBlocking {
       db
         .placeListDao()
@@ -78,10 +133,7 @@ class VisitEditorScreenTest {
     }
     val gatedDao =
       object : VisitDao by db.visitDao() {
-        override suspend fun insert(visit: VisitEntity) {
-          gate.await()
-          db.visitDao().insert(visit)
-        }
+        override suspend fun insert(visit: VisitEntity) = insert(visit)
       }
     val viewModel =
       VisitEditorViewModel(
@@ -94,7 +146,6 @@ class VisitEditorScreenTest {
     var done = 0
     compose.setContent {
       ForkloreTheme {
-        // Stands in for NavDisplay's own pop, which handles back whenever the screen doesn't.
         BackHandler { done++ }
         VisitEditorScreen(
           placeEntryId = "entry",
@@ -104,35 +155,31 @@ class VisitEditorScreenTest {
         )
       }
     }
-    idle()
-    compose
-      .onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("visit-note")))
-      .performScrollTo()
-      .performTextInput("Verano")
-    idle()
+    // The form appears only once the people query lands on Room's own executor; a single idle
+    // races it on a cold run.
+    compose.waitUntil(5_000) {
+      idle()
+      compose.onAllNodes(noteField).fetchSemanticsNodes().isNotEmpty()
+    }
+    return { done }
+  }
 
+  private fun typeNoteAndSave() {
+    compose.onNode(noteField).performScrollTo().performTextInput("Verano")
+    idle()
     compose.onNodeWithTag("visit-save").performScrollTo().performClick()
     idle()
+  }
 
+  private fun pressBackCancelAndTopBar() {
     Espresso.pressBack()
     idle()
-    compose.onNodeWithText("Discard changes?").assertDoesNotExist()
     compose.onNodeWithTag("visit-cancel").performScrollTo().performClick()
     compose.onNodeWithContentDescription("Back").performClick()
     idle()
-    compose.onNodeWithText("Discard changes?").assertDoesNotExist()
-    assertEquals(0, done)
-    compose.onNodeWithTag("visit-save").assertExists()
-
-    gate.complete(Unit)
-    val deadline = System.currentTimeMillis() + 5_000
-    while (done == 0) {
-      check(System.currentTimeMillis() < deadline) { "save never landed" }
-      idle()
-      Thread.sleep(5)
-    }
-    assertEquals(1, done)
   }
+
+  private val noteField = hasSetTextAction() and hasAnyAncestor(hasTestTag("visit-note"))
 
   private fun idle() {
     shadowOf(Looper.getMainLooper()).idle()
