@@ -13,6 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    uses: jasonarends/dev-standards/.github/workflows/lint.yml@v0.1.0
+
   build:
     runs-on: ubuntu-latest
     steps:
